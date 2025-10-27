@@ -1,23 +1,108 @@
 {
-  "name": "DevBoost",
-  "displayName": "Dev Boost",
-  "description": "DevBoost is a Visual Studio Code (VS Code) extension built to supercharge developer productivity through AI-driven automation and workflow optimization. DevBoost streamlines repetitive coding tasks and lays the foundation for a suite of intelligent tools to enhance software development. Its current feature, **SmartCmd**, creates one-click buttons for common tasks, making workflows faster and more efficient.",
+  "name": "devboost",
+  "displayName": "DevBoost",
+  "description": "DevBoost is a Visual Studio Code extension built to supercharge developer productivity through AI-driven automation and workflow optimization. DevBoost streamlines repetitive coding tasks and lays the foundation for a suite of intelligent tools to enhance software development. Its current feature, SmartCmd, creates one-click buttons for common tasks, making workflows faster and more efficient.",
   "version": "0.0.1",
+  "publisher": "devboost",
   "engines": {
     "vscode": "^1.105.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "devboost-sidebar",
+          "title": "DevBoost",
+          "icon": "$(rocket)"
+        }
+      ]
+    },
+    "views": {
+      "devboost-sidebar": [
+        {
+          "id": "devboost.buttonsView",
+          "name": "DevBoost",
+          "icon": "$(rocket)"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "DevBoost.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "devboost.smartCmdCreateButtons",
+        "title": "SmartCmd: Create AI Suggested Buttons",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "devboost.smartCmdCreateCustomButton",
+        "title": "SmartCmd: Create Custom Button",
+        "icon": "$(add)"
+      },
+      {
+        "command": "devboost.executeButton",
+        "title": "Execute Button",
+        "icon": "$(play)"
+      },
+      {
+        "command": "devboost.deleteButton",
+        "title": "Delete Button",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "devboost.editButton",
+        "title": "Edit Button",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "devboost.refreshButtons",
+        "title": "Refresh Buttons",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "devboost.smartCmdCreateButtons",
+          "when": "view == devboost.buttonsView && viewItem == smartcmd",
+          "group": "inline@1"
+        },
+        {
+          "command": "devboost.smartCmdCreateCustomButton",
+          "when": "view == devboost.buttonsView && viewItem == smartcmd",
+          "group": "inline@2"
+        },
+        {
+          "command": "devboost.refreshButtons",
+          "when": "view == devboost.buttonsView && viewItem == smartcmd",
+          "group": "inline@3"
+        },
+        {
+          "command": "devboost.smartCmdCreateCustomButton",
+          "when": "view == devboost.buttonsView && viewItem == section",
+          "group": "inline@1"
+        },
+        {
+          "command": "devboost.editButton",
+          "when": "view == devboost.buttonsView && viewItem == button",
+          "group": "inline@1"
+        },
+        {
+          "command": "devboost.deleteButton",
+          "when": "view == devboost.buttonsView && viewItem == button",
+          "group": "inline@2"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

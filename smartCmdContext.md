@@ -3,18 +3,202 @@
 ## Feature Overview
 **Feature Name**: SmartCmd  
 **Parent Project**: DevBoost  
-**Purpose**: SmartCmd is the flagship feature of the DevBoost VS Code extension, designed to enhance developer productivity by automating repetitive tasks through AI-generated buttons. It logs user activities—commands (e.g., `npm.run.build`), file operations (e.g., save, create, delete, rename), and Git actions (e.g., `git commit -m 'update'`)—in the project’s `.vscode/activity.log`. An AI model analyzes these logs to suggest buttons for frequent tasks, displayed in the VS Code status bar for one-click execution. Users can also create custom buttons via natural language prompts. Buttons are persisted per project in `.vscode/devboost.json` or globally in VS Code’s storage, reloading across sessions. SmartCmd is a core component of DevBoost, a broader productivity suite for developers.
+**Purpose**: SmartCmd is the flagship feature of the DevBoost VS Code extension, designed to enhance developer productivity by automating repetitive tasks through AI-generated buttons. It logs all user terminal commands, file operations (save, create, delete, rename), in the project's `.vscode/activity.log`. An AI model (GitHub Copilot Language Model API with gpt-4o) analyzes these logs to suggest OS-compatible buttons for frequent tasks, displayed in a hierarchical DevBoost sidebar (SmartCmd → Global Commands / Workspace Commands) for one-click execution. Users can also create custom buttons via natural language prompts. Buttons support dynamic input fields using `{variableName}` placeholders that prompt users at execution time. The system includes intelligent duplicate detection using AI-powered semantic analysis. Buttons can be edited (name and description) after creation. Buttons are persisted per project in `.vscode/devboost.json` or globally in VS Code's storage, reloading across sessions. SmartCmd is a core component of DevBoost, a broader productivity suite for developers.
 
-**Target Audience**: Software developers with repetitive tasks (e.g., builds, Git operations, file management).  
+**Target Audience**: Software developers with repetitive tasks (e.g., builds, Git operations, file management) across different operating systems (Windows, macOS, Linux).  
 
 ## Feature Details
 ### 1. Activity Logging
 - Tracks:
-  - VS Code commands (e.g., `npm.run.build`, `git.commit`).
+  - All terminal commands executed in VS Code's integrated terminal (no filtering).
   - File operations (save, create, delete, rename).
-  - Git terminal commands (e.g., `git commit -m 'update'`).
 - Logs stored in `.vscode/activity.log` in the project directory for workspace-specific tracking.
-- Format: `<timestamp> | <type>: <detail>` (e.g., `2025-10-27T11:40:00Z | Git: git push`).
+- Format: `<ISO timestamp> | <type>: <detail>` (e.g., `2025-10-27T10:37:41.083Z | Command: git status`).
+- Uses `onDidStartTerminalShellExecution` event to capture all commands.
+
+### 2. Hierarchical Sidebar Structure
+- **DevBoost Sidebar**: Main container with rocket icon (🚀) in activity bar.
+- **Three-Level Hierarchy**:
+  1. **DevBoost** (Root level - activity bar)
+  2. **⚡ SmartCmd** (Parent section showing total button count)
+  3. **🌐 Global Commands** / **📁 Workspace Commands** (Separate sections for scoped buttons)
+- **Action Buttons on SmartCmd Section**:
+  - ✨ Create AI Suggested Buttons
+  - ➕ Create Custom Button
+  - 🔄 Refresh Buttons
+- Buttons organized by scope with visual indicators and expandable/collapsible sections.
+- Uses `TreeDataProvider` with `TreeItemBase` class hierarchy for structure.
+
+### 3. AI-Suggested Buttons
+- Analyzes `.vscode/activity.log` to identify frequent tasks.
+- **OS Detection**: Automatically detects operating system (Windows/macOS/Linux) using `process.platform` and shell (bash/zsh/PowerShell/cmd) using `process.env.SHELL` or `process.env.COMSPEC`.
+- **OS-Aware Commands**: AI generates platform-specific commands compatible with the user's system.
+- AI suggests 3-5 buttons with names, commands, descriptions, and optional input fields.
+- Uses GitHub Copilot Language Model API (`vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' })`) with streaming responses.
+- **Intelligent Duplicate Detection**: Two-layer system prevents creating similar buttons:
+  1. **Normalization**: Removes quotes, whitespace, normalizes variable placeholders to `{VAR}`.
+  2. **AI Semantic Analysis**: Uses Copilot to detect functionally identical buttons by comparing command purpose and structure.
+  3. **Scope-Aware Checking**: Global buttons check only against global buttons; workspace buttons check against both global and workspace.
+- Returns button name if duplicate found, displays which existing button it matches.
+- Buttons displayed in the hierarchical sidebar under appropriate scope section.
+
+### 4. Custom Button Creation
+- Users describe buttons in natural language (e.g., "Button to commit changes with a message").
+- AI generates a button with name (with emoji), command, description, and automatically detects input fields.
+- Users choose "Project Directory" (workspace) or "Global" scope for persistence.
+- **Dynamic Input Fields**: Commands can include `{variableName}` placeholders:
+  - Example: `git commit -m '{message}'`
+  - AI automatically generates `InputField` objects with placeholder and variable name.
+  - User is prompted for each variable when button is clicked.
+  - Input validation ensures non-empty values.
+- **Manual Input Detection**: If manually creating buttons, regex detects `{variableName}` patterns and prompts for descriptions.
+
+### 5. Button Editing
+- Users can edit button name and description after creation.
+- **Edit Icon** (✏️ pencil) appears on hover next to each button (inline action).
+- Two-step process:
+  1. Edit button name (required, validated for non-empty).
+  2. Edit button description (optional).
+- Command and input fields preserved (cannot be edited to prevent breaking functionality).
+- Changes saved to appropriate storage location (global state or workspace JSON).
+- Tree view refreshes automatically after edit.
+
+### 6. Button Persistence
+- **Workspace-Specific**: Saved in `.vscode/devboost.json`, reloading when the project is reopened.
+- **Global**: Stored in VS Code's global state with key `devboost.globalButtons`, accessible across all projects.
+- Button data structure: `{ name: string, cmd: string, description?: string, inputs?: InputField[], scope?: 'workspace' | 'global' }`.
+- InputField structure: `{ placeholder: string, variable: string }`.
+
+### 7. Execution
+- Single-word VS Code commands (e.g., `workbench.action.files.save`) executed directly via `vscode.commands.executeCommand`.
+- Multi-word terminal commands (e.g., `npm test && git commit -m 'update'`) sent to integrated terminal via `terminal.sendText()`.
+- **Dynamic Input Handling**:
+  - Before execution, iterates through button's `inputs[]` array.
+  - Prompts user with `vscode.window.showInputBox` for each `{variable}`.
+  - Replaces placeholders using regex: `new RegExp(variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')`.
+  - Validates input (non-empty requirement).
+  - Cancellation supported at any prompt (aborts command execution).
+
+## Technical Architecture
+### Components
+- **Logging System**:
+  - Uses VS Code APIs: `workspace.onDidSaveTextDocument`, `workspace.onDidCreateFiles`, `workspace.onDidDeleteFiles`, `workspace.onDidRenameFiles`, `window.onDidStartTerminalShellExecution` (for all terminal commands).
+  - Logs in `.vscode/activity.log` using `fs.promises.appendFile` with ISO timestamp format.
+  - Log parser uses regex: `/\d{4}-\d{2}-\d{2}T[\d:.]+Z\s*\|\s*(.+?)\s*:\s*(.+)$/` to extract type and detail.
+
+- **AI Integration**:
+  - Uses GitHub Copilot Language Model API (`vscode.lm`) with gpt-4o model.
+  - Accesses via `vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' })`.
+  - Streaming responses using `for await (const part of response.text)`.
+  - **OS Detection**: `getSystemInfo()` function detects platform and shell for context.
+  - Expects JSON like:
+    ```json
+    [
+      {
+        "name": "🔨 Build",
+        "cmd": "npm run build",
+        "description": "Build the project using npm"
+      },
+      {
+        "name": "📝 Git Commit",
+        "cmd": "git add . && git commit -m '{message}'",
+        "description": "Stage all changes and commit with a message",
+        "inputs": [
+          { "placeholder": "Enter commit message", "variable": "{message}" }
+        ]
+      }
+    ]
+    ```
+  - JSON parsing uses `indexOf('{')` and `lastIndexOf('}')` to extract nested objects (fixed from regex issues).
+
+- **Duplicate Detection System**:
+  - **checkDuplicate()** method returns `string | null` (button name or null).
+  - Normalization function removes quotes, whitespace, converts `{variables}` to `{VAR}`.
+  - AI prompt asks to respond with button name if duplicate or "UNIQUE" if not.
+  - Scope-aware: filters buttons by target scope before checking.
+
+- **Tree View System**:
+  - **Class Hierarchy**:
+    - `TreeItemBase`: Base class with `itemType` property ('smartcmd' | 'section' | 'button').
+    - `SmartCmdTreeItem`: Parent node showing total buttons (⚡ SmartCmd).
+    - `SectionTreeItem`: Section nodes for Global/Workspace (emoji in label, no iconPath for alignment).
+    - `ButtonTreeItem`: Individual button items with play icon and command.
+  - **ButtonsTreeProvider**: Implements `TreeDataProvider<TreeItemBase>`.
+  - **getChildren()** logic:
+    - Root → SmartCmdTreeItem
+    - SmartCmd → SectionTreeItems (Global/Workspace)
+    - Section → ButtonTreeItems filtered by scope
+  - Sections use emoji in labels (🌐/📁) instead of `iconPath` for consistent alignment.
+
+- **Button Management**:
+  - **addButtons()**: Returns number of buttons added, validates and checks duplicates.
+  - **editButton()**: Prompts for new name and description, preserves cmd and inputs.
+  - **deleteButton()**: Removes from memory and storage, refreshes tree.
+  - **executeButtonCommand()**: Handles input prompts and command execution.
+  - Persists workspace buttons in `.vscode/devboost.json`, global buttons in `context.globalState` with key `devboost.globalButtons`.
+  - Loads buttons on activation using `loadButtons()` method.
+### 1. Activity Logging
+  - Loads buttons on activation using `loadButtons()` method.
+
+### File Structure
+- **Project Directory** (e.g., `/my-project/`):
+  - `.vscode/activity.log`: Logs all terminal commands and file operations for SmartCmd.
+    ```
+    2025-10-27T10:37:41.083Z | Command: git status
+    2025-10-27T10:39:10.978Z | Command: npm --version
+    2025-10-27T10:40:05Z | Save: /my-project/index.js
+    2025-10-27T10:41:15Z | Create: /my-project/utils.js
+    ```
+  - `.vscode/devboost.json`: Stores workspace-specific buttons with full metadata.
+    ```json
+    [
+      {
+        "name": "🔨 Build",
+        "cmd": "npm run build",
+        "description": "Build the project using npm"
+      },
+      {
+        "name": "📝 Git Commit",
+        "cmd": "git add . && git commit -m '{message}'",
+        "description": "Stage all changes and commit with a custom message",
+        "inputs": [
+          {
+            "placeholder": "Enter commit message",
+            "variable": "{message}"
+          }
+        ]
+      },
+      {
+        "name": "💾 Save All",
+        "cmd": "workbench.action.files.saveAll",
+        "description": "Save all open files"
+      }
+    ]
+    ```
+- **Extension Directory**:
+  - `package.json`: Metadata, commands, contributions (views, menus, commands).
+    - Commands: `devboost.smartCmdCreateButtons`, `devboost.smartCmdCreateCustomButton`, `devboost.executeButton`, `devboost.deleteButton`, `devboost.editButton`, `devboost.refreshButtons`.
+    - Views: `devboost.buttonsView` in `devboost-sidebar` container.
+    - Menus: Action buttons on SmartCmd section, edit/delete buttons on individual buttons.
+  - `extension.ts`: Main logic for SmartCmd (TypeScript).
+  - No external AI API keys needed - uses built-in VS Code Language Model API.
+- **Global Storage**:
+  - `context.globalState.get('devboost.globalButtons')`: Array of global buttons accessible across all workspaces.
+    ```typescript
+    [
+      {
+        "name": "🆕 New File Creator",
+        "cmd": "workbench.action.files.newUntitledFile",
+        "description": "Creates a new file with prompt for file name"
+      }
+    ]
+    ```
+
+### Dependencies
+- **VS Code API**: For event listeners, tree view, language model API, storage.
+- **Node.js `fs.promises`**: For async file operations (activity log, workspace buttons).
+- **Node.js `path`**: For cross-platform path handling.
+- **VS Code Language Model API** (`vscode.lm`): For GitHub Copilot gpt-4o model access (no separate extension dependency needed).
 
 ### 2. AI-Suggested Buttons
 - Analyzes `.vscode/activity.log` to identify frequent tasks.
@@ -195,27 +379,66 @@ async function getCopilotSuggestion(prompt: string): Promise<string> {
    - Global buttons appear in any project.
 
 
-## Enhancements
+## Current Implementation Status
+✅ **Completed Features**:
+1. Activity logging with ISO timestamps for all terminal commands
+2. Hierarchical sidebar structure (DevBoost → SmartCmd → Global/Workspace Commands)
+3. OS and shell detection for platform-specific command generation
+4. AI-powered button suggestions using GitHub Copilot Language Model API (gpt-4o)
+5. Custom button creation with natural language descriptions
+6. Dynamic input fields with `{variableName}` placeholders
+7. Intelligent duplicate detection (normalization + AI semantic analysis)
+8. Scope-aware checking (global vs workspace)
+9. Button editing (name and description)
+10. Button deletion with inline actions
+11. Button persistence (workspace JSON + global state)
+12. Command execution with dynamic input prompts
+13. JSON parsing improvements for nested objects
+14. Tree view with proper alignment and visual indicators
+
+## Future Enhancements
 1. **Button Management**:
-   - Add `devboost.smartCmdRemoveButton` to delete buttons via QuickPick.
+   - Add command editing capability (currently only name/description)
+   - Bulk operations (delete multiple, export/import button sets)
+   - Button reordering/sorting options
+   - Button categories/tags for organization
 2. **Advanced Logging**:
-   - Log file content changes (`workspace.onDidChangeTextDocument`).
-   - Parse Git events with `simple-git`.
+   - Log file content changes (`workspace.onDidChangeTextDocument`)
+   - Parse Git events with `simple-git` for more detailed tracking
+   - Activity analytics dashboard
 3. **AI Refinements**:
-   - Enforce strict JSON output from GitHub Copilot.
-   - Add fallback to other LLMs if Copilot is unavailable.
-   - Implement prompt optimization for better Copilot responses.
-4. **UI**:
-   - Use Webview for button management dashboard.
-5. **GitHub Copilot Enhancements**:
-   - Cache Copilot responses to reduce API calls.
-   - Implement smart prompt templates based on project type.
-   - Add context-aware suggestions based on file types and frameworks.
+   - Context-aware suggestions based on file types and frameworks
+   - Learning from user's button usage patterns
+   - Multi-step command workflows (button chains)
+4. **UI Enhancements**:
+   - Webview for button management dashboard
+   - Drag-and-drop button organization
+   - Button preview/test mode
+   - Search/filter buttons
+5. **Collaboration**:
+   - Share button configurations across team
+   - Button marketplace/templates
+   - Project-specific button recommendations
 
 ## Edge Cases
-- **No Workspace**: Skip logging/buttons, show message.
-- **GitHub Copilot Unavailable**: Show message suggesting Copilot installation/activation, provide fallback options.
-- **Invalid AI Response**: Handle bad JSON with error message.
-- **File Conflicts**: Use async `fs.promises`, create `.vscode` if missing.
-- **Empty Log**: Suggest custom button creation.
+- **No Workspace**: Skip logging/buttons, show informational message to open a workspace.
+- **GitHub Copilot Unavailable**: Shows warning message, provides fallback pattern-based suggestions.
+- **Invalid AI Response**: Handles malformed JSON with regex extraction and manual input fallback.
+- **File Conflicts**: Uses async `fs.promises`, creates `.vscode` directory if missing.
+- **Empty Log**: Suggests creating custom button instead of AI-suggested buttons.
+- **Duplicate Button Names**: Allowed across different scopes, prevented within same functional group by AI.
+- **Missing Input Values**: Validates non-empty, cancels execution if user cancels any input prompt.
+- **Long Commands**: No length limit, handles complex multi-line commands.
+- **Special Characters in Variables**: Regex escaping ensures proper replacement of `{variables}` with special chars.
+
+## Key Implementation Files
+- **`src/extension.ts`** (~1200 lines): Main extension logic with all features
+  - Interfaces: `InputField`, `Button`, Tree item classes
+  - `ButtonsTreeProvider`: Main tree data provider with hierarchical structure
+  - Button management methods: `addButtons()`, `editButton()`, `deleteButton()`, `checkDuplicate()`
+  - AI integration: `getAISuggestions()`, `getCustomButtonSuggestion()`
+  - Utility functions: `getSystemInfo()`, `parseActivityLog()`, `executeButtonCommand()`
+- **`package.json`**: Extension manifest with commands, views, menus, contributions
+- **`.vscode/devboost.json`**: Workspace-specific button storage (per project)
+- **`.vscode/activity.log`**: Activity tracking log (per project)
 
