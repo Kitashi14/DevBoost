@@ -1,7 +1,7 @@
 # DevBoost
 
 ## Overview
-**DevBoost** is a Visual Studio Code (VS Code) extension built to supercharge developer productivity through AI-driven automation and workflow optimization. Designed for the Cisco AI hackathon, DevBoost streamlines repetitive coding tasks and lays the foundation for a suite of intelligent tools to enhance software development. Its current feature, **SmartCmd**, creates one-click buttons for common tasks, making workflows faster and more efficient.
+**DevBoost** is a Visual Studio Code (VS Code) extension built to enhance developer productivity through AI-driven automation and workflow optimization. Designed for the Cisco AI hackathon, DevBoost streamlines repetitive coding tasks and lays the foundation for a suite of intelligent tools to enhance software development. Its current feature, **SmartCmd**, creates one-click buttons for common tasks, making workflows faster and more efficient.
 
 ## Key Features
 - **SmartCmd**: Logs developer actions (e.g., commands, file operations, Git tasks) in a project’s `.vscode` folder and uses AI to suggest or create custom buttons for the VS Code status bar. Buttons persist per project or globally, enabling seamless task execution.
