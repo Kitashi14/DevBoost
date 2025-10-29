@@ -40,11 +40,15 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
+const aiServices = __importStar(require("./aiServices"));
 // Global variables
 let activityLogPath;
 let buttonsProvider;
 let globalButtonsPath;
 let promptInputPath;
+// Track commands executed by SmartCmd per workspace to exclude from activity log
+// Key: workspace folder path, Value: Set of executed commands
+const smartCmdExecutedCommands = new Map();
 // Tree item base class
 class TreeItemBase extends vscode.TreeItem {
     itemType;
@@ -87,7 +91,7 @@ class ButtonTreeItem extends TreeItemBase {
         // Build tooltip with both descriptions
         const tooltipParts = [];
         // Add user description if available
-        if (button.user_description) {
+        if (!button.ai_description) {
             tooltipParts.push(`User: ${button.user_description}`);
         }
         // Add AI description if available
@@ -213,8 +217,8 @@ class ButtonsTreeProvider {
             // Check for duplicates using AI-powered semantic comparison
             const duplicateInfo = await this.checkDuplicate(b, scope);
             if (duplicateInfo) {
-                duplicateButtons.push({ newName: b.name, existingName: duplicateInfo });
-                console.warn('DevBoost: Skipping duplicate/similar button:', b.name, '(similar to:', duplicateInfo + ')');
+                duplicateButtons.push({ newName: b.name, existingName: duplicateInfo, button: b });
+                console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateInfo + ')');
             }
             else {
                 validButtons.push(b);
@@ -223,8 +227,17 @@ class ButtonsTreeProvider {
         // Show feedback about duplicates
         if (duplicateButtons.length > 0) {
             if (duplicateButtons.length === 1) {
+                // If there's only one duplicate, ask user for confirmation
                 const dup = duplicateButtons[0];
-                vscode.window.showWarningMessage(`DevBoost: Skipping suggested new button "${dup.newName}" as it's similar to existing button "${dup.existingName}".`);
+                const result = await vscode.window.showWarningMessage(`DevBoost: Button "${dup.newName}" appears to be similar to existing button "${dup.existingName}". Do you want to add it anyway?`, { modal: true }, 'Add Anyway');
+                // If user chose to add anyway, move it to valid buttons
+                if (result === 'Add Anyway') {
+                    validButtons.push(dup.button);
+                    duplicateButtons.length = 0; // Clear duplicates array since we're adding it
+                }
+                else {
+                    vscode.window.showInformationMessage('DevBoost: Button addition cancelled.');
+                }
             }
             else {
                 const dupMsg = `Suggested new ${duplicateButtons.length} buttons are similar to existing ones: ${duplicateButtons.slice(0, 3).map(d => `"${d.newName}"`).join(', ')}${duplicateButtons.length > 3 ? '...' : ''}`;
@@ -232,8 +245,9 @@ class ButtonsTreeProvider {
             }
         }
         if (validButtons.length === 0) {
-            if (duplicateButtons.length > 0 && invalidButtons.length === 0) {
-                vscode.window.showInformationMessage('All buttons are similar to existing ones. No new buttons added.');
+            if (invalidButtons.length === 0) {
+                if (duplicateButtons.length > 1)
+                    vscode.window.showInformationMessage('All buttons are similar to existing ones. No new buttons added.');
             }
             else {
                 vscode.window.showWarningMessage('DevBoost: No valid buttons to add.');
@@ -262,106 +276,15 @@ class ButtonsTreeProvider {
     // AI-powered duplicate detection using semantic similarity
     // Returns the name of the existing button if duplicate found, null otherwise
     async checkDuplicate(newButton, targetScope) {
-        if (this.buttons.length === 0) {
-            return null;
-        }
-        // Filter buttons based on scope:
-        // - Global scope: check only against global buttons
-        // - Workspace scope: check against both global and workspace buttons
-        const buttonsToCheck = targetScope === 'global'
-            ? this.buttons.filter(b => b.scope === 'global')
-            : this.buttons; // Workspace checks against all buttons
-        if (buttonsToCheck.length === 0) {
-            return null;
-        }
-        // Normalize command for comparison (remove variable placeholders)
-        const normalizeCmd = (cmd) => {
-            return cmd
-                .replace(/\{[^}]+\}/g, '{VAR}') // Replace all {variables} with {VAR}
-                .replace(/['"`]/g, '') // Remove quotes
-                .replace(/\s+/g, ' ') // Normalize whitespace
-                .toLowerCase()
-                .trim();
-        };
-        const newCmdNormalized = normalizeCmd(newButton.cmd);
-        // First, do quick exact match check on normalized commands
-        for (const existing of buttonsToCheck) {
-            const existingCmdNormalized = normalizeCmd(existing.cmd);
-            // Exact match after normalization
-            if (newCmdNormalized === existingCmdNormalized) {
-                console.log(`Duplicate detected: "${newButton.cmd}" matches "${existing.cmd}" (${existing.scope})`);
-                return existing.name; // Return the existing button name
-            }
-        }
-        // If no exact match, use AI for semantic similarity check
-        try {
-            const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
-            if (models.length === 0) {
-                // Fallback: just use normalized string comparison
-                return null;
-            }
-            const model = models[0];
-            // Create comparison list of buttons to check (based on scope)
-            const existingButtonsInfo = buttonsToCheck.map((b, i) => {
-                const desc = b.ai_description || b.user_description || 'N/A';
-                return `${i + 1}. Name: "${b.name}", Command: "${b.cmd}", Description: "${desc}", Scope: ${b.scope}`;
-            }).join('\n');
-            const scopeContext = targetScope === 'global'
-                ? 'This button will be available globally (in all projects).'
-                : 'This button will be available in the current workspace. Checking against both global and workspace buttons.';
-            const newButtonDesc = newButton.ai_description || newButton.user_description || 'N/A';
-            const prompt = `Compare this new button with existing buttons and determine if it's a duplicate.
-			
-			New Button (Target Scope: ${targetScope}):
-			- Name: "${newButton.name}"
-			- Command: "${newButton.cmd}"
-			- Description: "${newButtonDesc}"
-			
-			${scopeContext}
-
-			Existing Buttons to Check:
-			${existingButtonsInfo}
-
-			Consider buttons as duplicates if they:
-			1. Execute the same command (even with different variable names)
-			2. Perform the same action (e.g., "git commit" vs "commit changes")
-			3. Have the same functionality with minor syntax differences
-
-			Don't consider buttons as duplicates if they:
-			1. Have different commands even if they seem related (e.g., "git commit" vs "git push")
-			2. Have specific tasks assigned to it even if a similar command exists
-
-			If it's a duplicate/similar, respond with ONLY the NAME of the most similar existing button (e.g., "🔨 Build Project").
-			If it's unique, respond with only "UNIQUE".`;
-            const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-            const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-            console.log(prompt);
-            let fullResponse = '';
-            for await (const part of response.text) {
-                fullResponse += part;
-            }
-            console.log('AI duplicate detection response:', fullResponse);
-            const answer = fullResponse.trim();
-            // Check if response is UNIQUE
-            if (answer.toUpperCase() === 'UNIQUE' || answer.toUpperCase().includes('NO')) {
-                return null;
-            }
-            // Otherwise, return the existing button name
-            console.log(`AI detected duplicate: "${newButton.name}" is similar to "${answer}"`);
-            return answer;
-        }
-        catch (error) {
-            console.error('Error in AI duplicate detection:', error);
-            // On error, allow the button (better to have duplicates than miss new ones)
-            return null;
-        }
+        return await aiServices.checkDuplicateButton(newButton, this.buttons, targetScope);
     }
     async deleteButton(item) {
+        console.warn('Delete button invoked for:', item.button);
         if (!item || !item.button) {
             vscode.window.showWarningMessage('DevBoost: Invalid button item.');
             return;
         }
-        const index = this.buttons.findIndex(b => b.name === item.button.name && b.cmd === item.button.cmd);
+        const index = this.buttons.findIndex(b => b.name === item.button.name && b.cmd === item.button.cmd && b.scope === item.button.scope);
         if (index === -1) {
             vscode.window.showWarningMessage(`DevBoost: Button "${item.button.name}" not found.`);
             return;
@@ -587,6 +510,19 @@ function activate(context) {
             vscode.window.showInformationMessage('DevBoost: This button is already in global scope.');
             return;
         }
+        // Use AI to validate if button is suitable for global scope
+        vscode.window.showInformationMessage('Analyzing button compatibility with global scope...');
+        const isGlobalSafe = await aiServices.checkIfButtonIsGlobalSafe(item.button);
+        if (!isGlobalSafe) {
+            const result = await vscode.window.showWarningMessage(`DevBoost: This button appears to be workspace-specific (e.g., contains project paths, workspace settings, or project-specific commands). ` +
+                `Adding it to global scope might cause issues in other projects. Do you want to continue anyway?`, { modal: true }, // Make it modal so it doesn't auto-dismiss
+            'Continue Anyway');
+            // If user didn't click "Continue Anyway" (clicked Cancel or dismissed), abort
+            if (result !== 'Continue Anyway') {
+                vscode.window.showInformationMessage('DevBoost: Add to global cancelled.');
+                return;
+            }
+        }
         // Create a copy of the button for global scope
         const globalButton = {
             name: item.button.name,
@@ -658,6 +594,22 @@ function activate(context) {
         }
     });
     context.subscriptions.push(helloWorldDisposable, createButtonsDisposable, createCustomButtonDisposable, executeButtonDisposable, deleteButtonDisposable, editButtonDisposable, addToGlobalDisposable, refreshButtonsDisposable, openButtonsFileDisposable);
+    // Listen for workspace folder changes to reload buttons
+    context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
+        console.log('DevBoost: Workspace folders changed');
+        // Update activity log path for new workspace
+        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+            const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+            activityLogPath = path.join(workspaceRoot, '.vscode', 'activity.log');
+            console.log('DevBoost: Updated activity log path:', activityLogPath);
+        }
+        else {
+            activityLogPath = undefined;
+        }
+        // Reload buttons to get new workspace buttons
+        await buttonsProvider.loadButtons();
+        vscode.window.showInformationMessage('DevBoost: Buttons reloaded for new workspace');
+    }));
 }
 // Setup activity logging system
 function setupActivityLogging(context) {
@@ -686,6 +638,21 @@ function setupActivityLogging(context) {
         const commandLine = event.execution.commandLine.value;
         const command = commandLine.trim();
         const exitCode = event.exitCode;
+        // Get current workspace path for tracking
+        const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        // Skip commands executed by SmartCmd buttons in this workspace
+        if (workspacePath) {
+            const workspaceCommands = smartCmdExecutedCommands.get(workspacePath);
+            if (workspaceCommands?.has(command)) {
+                console.log(`DevBoost: Skipping SmartCmd-executed command in workspace: ${command}`);
+                workspaceCommands.delete(command); // Clean up after tracking
+                // Clean up empty sets to prevent memory leaks
+                if (workspaceCommands.size === 0) {
+                    smartCmdExecutedCommands.delete(workspacePath);
+                }
+                return;
+            }
+        }
         // Log successful commands (exit code 0) and interrupted commands (exit code 130, SIGINT)
         // Skip commands with exit code 127 (command not found) and 126 (command not executable)
         if (exitCode === 0 || exitCode === 130 || exitCode === undefined) {
@@ -775,7 +742,8 @@ async function createAIButtons(context) {
         }
         // Get AI suggestions from GitHub Copilot
         vscode.window.showInformationMessage('Analyzing your workflow patterns...');
-        const buttons = await getAISuggestions(topActivities);
+        const osInfo = getSystemInfo();
+        const buttons = await aiServices.getAISuggestions(topActivities, osInfo.platform, osInfo.shell);
         if (buttons.length === 0) {
             vscode.window.showWarningMessage('Could not generate button suggestions. Please try again.');
             return;
@@ -824,29 +792,45 @@ async function createCustomButton(context, scopeInput) {
         const doc = await vscode.workspace.openTextDocument(promptInputPath);
         await vscode.window.showTextDocument(doc, { preview: false });
         // Show info message with tips
-        vscode.window.showInformationMessage('💡 Describe the button you want to create, then close the file. Example: "Button to add and commit code"', { modal: true });
-        // Wait for the file to be closed by monitoring when it's no longer visible
+        vscode.window.showInformationMessage('💡 Describe the functionality of the button you want to create, then close this file to move on. Example: "Button to add changes and commit code using git"', { modal: true });
+        // Wait for the file to be closed - use multiple events to detect closure
         const description = await new Promise((resolve) => {
-            const checkInterval = setInterval(async () => {
-                // Check if the document is still visible in any editor
-                const isVisible = vscode.window.visibleTextEditors.some(editor => editor.document.uri.fsPath === doc.uri.fsPath);
-                if (!isVisible) {
-                    clearInterval(checkInterval);
-                    // Read the content from file
-                    try {
-                        const fileContent = await fs.readFile(promptInputPath, 'utf-8');
-                        const content = fileContent.trim();
-                        // Clean the file after reading
-                        await fs.writeFile(promptInputPath, '');
-                        console.log('File closed, content read:', content);
-                        resolve(content);
-                    }
-                    catch (error) {
-                        console.error('Error reading prompt file:', error);
-                        resolve('');
-                    }
+            let resolved = false;
+            const checkAndResolve = async () => {
+                if (resolved)
+                    return;
+                // Check if document is still open in tabs
+                const isOpen = vscode.window.tabGroups.all
+                    .flatMap(group => group.tabs)
+                    .some(tab => {
+                    const tabInput = tab.input;
+                    return tabInput?.uri?.fsPath === doc.uri.fsPath;
+                });
+                if (!isOpen) {
+                    console.log('Prompt input file closed, reading content...');
+                    resolved = true;
+                    disposable1.dispose();
+                    disposable2.dispose();
+                    // Read content from the document
+                    const content = doc.getText().trim();
+                    // Clean the file after reading
+                    fs.writeFile(promptInputPath, '').catch(error => {
+                        console.error('Error cleaning prompt file:', error);
+                    });
+                    console.log('File closed, content read:', content);
+                    resolve(content);
                 }
-            }, 500); // Check every 500ms
+            };
+            // Listen to tab changes
+            const disposable1 = vscode.window.tabGroups.onDidChangeTabs(async () => {
+                console.log('Tab changed, checking if prompt file is closed...');
+                await checkAndResolve();
+            });
+            // Also listen to visible editors change as backup
+            const disposable2 = vscode.window.onDidChangeVisibleTextEditors(async () => {
+                console.log('Visible editors changed, checking if prompt file is closed...');
+                await checkAndResolve();
+            });
         });
         console.warn('User button description:', description);
         // If content is empty, return
@@ -880,7 +864,8 @@ async function createCustomButton(context, scopeInput) {
             cancellable: false
         }, async (progress) => {
             // Get AI suggestion from GitHub Copilot
-            const button = await getCustomButtonSuggestion(description);
+            const osInfo = getSystemInfo();
+            const button = await aiServices.getCustomButtonSuggestion(description, osInfo.platform, osInfo.shell);
             if (!button) {
                 vscode.window.showWarningMessage('Could not generate button. Please try again.');
                 return;
@@ -965,6 +950,14 @@ async function executeButtonCommand(button) {
     try {
         const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('DevBoost');
         terminal.show();
+        // Track this command as SmartCmd-executed to exclude from activity log (workspace-specific)
+        const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (workspacePath) {
+            if (!smartCmdExecutedCommands.has(workspacePath)) {
+                smartCmdExecutedCommands.set(workspacePath, new Set());
+            }
+            smartCmdExecutedCommands.get(workspacePath).add(finalCommand);
+        }
         terminal.sendText(finalCommand);
         vscode.window.setStatusBarMessage(`⚡ Executed: ${button.name}`, 3000);
     }
@@ -993,263 +986,6 @@ function getSystemInfo() {
         platform,
         shell: shellName
     };
-}
-// Get AI suggestions from GitHub Copilot
-async function getAISuggestions(topActivities) {
-    try {
-        // Select GitHub Copilot models using the Language Model API
-        const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
-        if (models.length === 0) {
-            vscode.window.showWarningMessage('GitHub Copilot models not available. Using fallback suggestions.');
-            return getFallbackSuggestions(topActivities);
-        }
-        const model = models[0];
-        // Get system information
-        const osInfo = getSystemInfo();
-        // Craft the prompt for button suggestions
-        const prompt = `Based on the following user activities in VS Code, suggest 3-5 one-click command buttons that would be helpful.
-
-		SYSTEM INFORMATION:
-		- Operating System: ${osInfo.platform}
-		- Shell: ${osInfo.shell}
-		
-		Activities:
-		${topActivities.map((activity, i) => `${i + 1}. ${activity}`).join('\n')}
-		
-		IMPORTANT: Generate commands that are compatible with ${osInfo.platform} and ${osInfo.shell}.
-		${osInfo.platform === 'Windows' ? '- Use Windows-compatible commands (e.g., "dir" instead of "ls", proper path separators)' : ''}
-		${osInfo.platform === 'macOS' || osInfo.platform === 'Linux' ? '- Use Unix/Linux-compatible commands' : ''}
-		
-		For each button, provide:
-		1. A short descriptive name (with an emoji prefix)
-		2. The exact command to execute (terminal command or VS Code command) - MUST be compatible with ${osInfo.platform}
-		3. A brief description of what the button does (this will be stored as ai_description)
-		4. Optional input fields if the command needs user input (use {variableName} as placeholder in cmd)		Format your response as JSON array:
-		[
-			{
-				"name": "🔨 Build Project",
-				"cmd": "npm run build",
-				"ai_description": "Builds the project using npm"
-			},
-			{
-				"name": "📝 Git Commit",
-				"cmd": "git add . && git commit -m '{message}'",
-				"ai_description": "Stage all changes and commit with a message",
-				"inputs": [
-					{
-						"placeholder": "Enter commit message",
-						"variable": "{message}"
-					}
-				]
-			}
-		]
-		
-		Only respond with the JSON array, no additional text.`;
-        const messages = [
-            vscode.LanguageModelChatMessage.User(prompt)
-        ];
-        console.log('AI button suggestions prompt:', prompt);
-        // Send request to the model
-        const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-        // Collect the response
-        let fullResponse = '';
-        for await (const part of response.text) {
-            fullResponse += part;
-        }
-        console.log('AI response for button suggestions:', fullResponse);
-        // Parse the JSON response
-        const jsonMatch = fullResponse.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-            const buttons = JSON.parse(jsonMatch[0]);
-            console.log('Parsed buttons from AI response:', buttons);
-            return buttons.filter(b => b.name && b.cmd);
-        }
-        // Fallback if parsing fails
-        vscode.window.showWarningMessage('Could not parse AI response. Using fallback suggestions.');
-        return getFallbackSuggestions(topActivities);
-    }
-    catch (err) {
-        // Handle errors
-        if (err instanceof vscode.LanguageModelError) {
-            console.log('Language Model Error:', err.message, err.code);
-            vscode.window.showWarningMessage(`AI suggestion failed: ${err.message}. Using fallback suggestions.`);
-        }
-        else {
-            console.error('Unexpected error getting AI suggestions:', err);
-            vscode.window.showWarningMessage('AI suggestion failed. Using fallback suggestions.');
-        }
-        return getFallbackSuggestions(topActivities);
-    }
-}
-// Get custom button suggestion from GitHub Copilot
-async function getCustomButtonSuggestion(description) {
-    try {
-        // Select GitHub Copilot models
-        const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
-        if (models.length === 0) {
-            vscode.window.showInformationMessage('GitHub Copilot not available. Please enter button details manually.');
-            return await getManualButtonInput(description);
-        }
-        const model = models[0];
-        // Get system information
-        const osInfo = getSystemInfo();
-        // Craft the prompt for custom button
-        const prompt = `Create a VS Code button based on this description: "${description}"
-
-		SYSTEM INFORMATION:
-		- Operating System: ${osInfo.platform}
-		- Shell: ${osInfo.shell}
-
-		IMPORTANT: Generate commands that are compatible with ${osInfo.platform} and ${osInfo.shell}.
-		${osInfo.platform === 'Windows' ? '- Use Windows-compatible commands (e.g., PowerShell or cmd syntax)' : ''}
-		${osInfo.platform === 'macOS' || osInfo.platform === 'Linux' ? '- Use Unix/Linux-compatible commands (bash/zsh syntax)' : ''}
-
-		Provide:
-		1. A short descriptive name (with an emoji prefix, max 30 characters)
-		2. The exact command to execute (terminal command or VS Code command like "workbench.action.files.saveAll") - MUST be compatible with ${osInfo.platform}
-		3. A brief description of what the button does (this will be stored as ai_description)
-		4. If the command needs user input, include input fields with placeholders (use {variableName} format in cmd)
-
-		The user provided this description: "${description}" (this will be stored as user_description)
-
-		Format your response as JSON:
-		{
-			"name": "🔨 Build Project",
-			"cmd": "npm run build",
-			"ai_description": "Builds the project using npm"
-		}
-
-		Or with inputs:
-		{
-			"name": "📝 Git Commit",
-			"cmd": "git add . && git commit -m '{message}'",
-			"ai_description": "Stage all changes and commit with a custom message",
-			"inputs": [
-				{
-					"placeholder": "Enter commit message",
-					"variable": "{message}"
-				}
-			]
-		}
-
-		Only respond with the JSON object, no additional text.`;
-        const messages = [
-            vscode.LanguageModelChatMessage.User(prompt)
-        ];
-        console.log('Custom button prompt:', prompt);
-        // Send request to the model
-        const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-        // Collect the response
-        let fullResponse = '';
-        for await (const part of response.text) {
-            fullResponse += part;
-        }
-        console.log('AI response for custom button:', fullResponse);
-        // Parse the JSON response - find the outermost JSON object
-        try {
-            // Remove markdown code blocks if present
-            let cleanedResponse = fullResponse.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-            // Find the first { and last } to get complete JSON object
-            const firstBrace = cleanedResponse.indexOf('{');
-            const lastBrace = cleanedResponse.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-                const jsonString = cleanedResponse.substring(firstBrace, lastBrace + 1);
-                const button = JSON.parse(jsonString);
-                if (button.name && button.cmd) {
-                    // Add user_description from the original user input
-                    button.user_description = description;
-                    console.log('Successfully parsed button:', button);
-                    return button;
-                }
-            }
-        }
-        catch (parseError) {
-            console.error('JSON parsing error:', parseError);
-        }
-        // Fallback to manual input if parsing fails
-        vscode.window.showInformationMessage('Could not parse AI response. Please enter button details manually.');
-        return await getManualButtonInput(description);
-    }
-    catch (err) {
-        // Handle errors
-        if (err instanceof vscode.LanguageModelError) {
-            console.log('Language Model Error:', err.message, err.code);
-            vscode.window.showInformationMessage(`AI suggestion failed: ${err.message}. Please enter manually.`);
-        }
-        else {
-            console.error('Unexpected error getting custom button suggestion:', err);
-            vscode.window.showInformationMessage('AI suggestion failed. Please enter button details manually.');
-        }
-        return await getManualButtonInput(description);
-    }
-}
-// Fallback suggestions based on common patterns
-function getFallbackSuggestions(topActivities) {
-    const buttons = [];
-    const activityString = topActivities.join(' ').toLowerCase();
-    // Analyze activities and suggest common buttons with AI descriptions (no user description)
-    if (activityString.includes('git') || activityString.includes('commit')) {
-        buttons.push({
-            name: '📝 Git Commit',
-            cmd: 'git add . && git commit -m \'{message}\'',
-            ai_description: 'Stage all changes and commit with a custom message',
-            inputs: [
-                {
-                    placeholder: 'Enter commit message',
-                    variable: '{message}'
-                }
-            ]
-        });
-        buttons.push({
-            name: '🚀 Git Push',
-            cmd: 'git push',
-            ai_description: 'Push commits to remote repository'
-        });
-    }
-    if (activityString.includes('npm') || activityString.includes('build')) {
-        buttons.push({
-            name: '🔨 Build',
-            cmd: 'npm run build',
-            ai_description: 'Build the project using npm'
-        });
-    }
-    if (activityString.includes('test')) {
-        buttons.push({
-            name: '🧪 Run Tests',
-            cmd: 'npm test',
-            ai_description: 'Run all tests in the project'
-        });
-    }
-    if (activityString.includes('save')) {
-        buttons.push({
-            name: '💾 Save All',
-            cmd: 'workbench.action.files.saveAll',
-            ai_description: 'Save all open files'
-        });
-    }
-    // Add default buttons if none matched
-    if (buttons.length === 0) {
-        buttons.push({
-            name: '🔨 Build',
-            cmd: 'npm run build',
-            ai_description: 'Build the project'
-        }, {
-            name: '🧪 Test',
-            cmd: 'npm test',
-            ai_description: 'Run tests'
-        }, {
-            name: '📝 Commit',
-            cmd: 'git add . && git commit -m \'{message}\'',
-            ai_description: 'Commit changes with a message',
-            inputs: [
-                {
-                    placeholder: 'Enter commit message',
-                    variable: '{message}'
-                }
-            ]
-        });
-    }
-    return buttons.slice(0, 5);
 }
 // Manual button input as fallback
 async function getManualButtonInput(description) {
