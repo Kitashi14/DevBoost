@@ -68,33 +68,47 @@ In the Extension Development Host window:
 - **Click any button** in the sidebar to execute its command
 - **Buttons with input fields** will prompt you for values (e.g., commit message, branch name)
 - **Hover** over a button to see:
-  - Full description
+  - User description (if provided)
+  - AI-generated description
   - Required input fields (if any)
   - Command that will be executed
-- **Hover** over a button to see inline action icons:
-  - ✏️ **Edit** - Modify button name and description
-  - 🗑️ **Delete** - Remove the button
+- **Right-click any button** to access context menu actions:
+  - ✏️ **Edit Button** - Modify button name and user description
+  - 🌐 **Add to Global Buttons** - Copy workspace button to global scope (workspace buttons only)
+  - 🗑️ **Delete Button** - Remove the button
 - **Section indicators**:
-  - **🌐 Global Commands** - Available in all projects (stored in VS Code global state)
+  - **🌐 Global Commands** - Available in all projects (stored in `global-buttons.json` in VS Code's global storage)
   - **📁 Workspace Commands** - Only available in current workspace (stored in `.vscode/devboost.json`)
 
-### 8. Edit Buttons
-1. **Hover** over any button to see the edit icon (✏️ pencil)
-2. **Click the edit icon** to modify:
+### 8. Edit and Manage Buttons
+1. **Right-click** any button to open the context menu
+2. **Edit Button**: Modify button details
    - **Button name**: Update the display name (keep emojis for visual appeal!)
-   - **Description**: Update the tooltip description
-3. **Changes are saved** automatically to the appropriate storage location
-4. **Note**: Command and input fields cannot be edited (to prevent breaking functionality)
+   - **User description**: Update your personal description
+   - **Note**: AI description, command, and input fields are preserved
+3. **Add to Global Buttons** (workspace buttons only):
+   - Copy a workspace button to global scope
+   - Makes it available in all projects (saved to `global-buttons.json`)
+   - Includes automatic duplicate detection
+4. **Delete Button**: Remove the button from your collection
+5. **Changes are saved** automatically to the appropriate storage location
 
-### 9. Manage Buttons
-- Click the **🔄 refresh icon** on the SmartCmd section to reload buttons from disk
-- Delete buttons using the trash icon (🗑️) next to each button
-- Edit buttons using the pencil icon (✏️) to update name and description
-- Buttons persist across VS Code sessions
+### 9. Additional Features
+- **Refresh Buttons**: Click the **🔄 refresh icon** on the SmartCmd section to reload buttons from disk
+- **Open Buttons File**: Click the **📄 file icon** on section headers to edit JSON directly
+  - Global buttons: Opens `global-buttons.json` in VS Code's global storage
+  - Workspace buttons: Opens `.vscode/devboost.json` in current workspace
+- **Button Persistence**: All buttons persist across VS Code sessions
+  - Workspace buttons: Stored in workspace `.vscode/devboost.json`
+  - Global buttons: Stored in `global-buttons.json` file in VS Code's global storage directory
 - **Duplicate Detection**: AI automatically prevents creating similar buttons
   - Compares command structure and functionality
   - Normalizes commands to detect variations (e.g., different variable names)
   - Uses semantic analysis to detect functionally identical buttons
+  - Scope-aware: Global buttons only check against other global buttons
+- **Button Descriptions**: Two types of descriptions stored for each button
+  - **User Description**: Your personal description of what the button does
+  - **AI Description**: AI-generated description based on the command
 
 ## 📁 File Structure Created
 
@@ -107,7 +121,11 @@ your-project/
     └── devboost.json        # Workspace-specific buttons
 ```
 
-Global buttons are stored in VS Code's global state (not visible as files).
+Global buttons are stored in a JSON file in VS Code's global storage directory:
+- **macOS/Linux**: `~/.vscode/extensions/.../globalStorage/<publisher>.<extension>/global-buttons.json`
+- **Windows**: `%APPDATA%\Code\User\globalStorage\<publisher>.<extension>\global-buttons.json`
+
+This file persists across VS Code sessions and is accessible from all workspaces.
 
 ## 🧪 Example Workflow
 
@@ -136,7 +154,10 @@ Global buttons are stored in VS Code's global state (not visible as files).
 7. **Click any button** to execute its command instantly!
    - Buttons with input fields will prompt you first
    - All commands are OS-compatible (works on Windows/macOS/Linux)
-8. **Edit any button**: Hover and click the ✏️ icon to update name/description
+8. **Right-click any button** to access:
+   - ✏️ Edit button name and user description
+   - 🌐 Add to Global (for workspace buttons)
+   - 🗑️ Delete button
 
 ### Example: Button with Input Fields
 
@@ -192,18 +213,24 @@ When you click the **📝 Git Commit** button:
 ✅ **Button Management**
 - Execute buttons with single click
 - **Interactive input prompts** for dynamic buttons
-- **Edit button name and description** (✏️ pencil icon)
-- Delete buttons easily (🗑️ trash icon)
+- **Context menu actions** (right-click on buttons):
+  - ✏️ Edit button name and user description
+  - 🌐 Add to Global Buttons (workspace buttons only)
+  - 🗑️ Delete button
+- **Dual description system**:
+  - User description (your custom description)
+  - AI description (AI-generated explanation)
 - Refresh buttons from disk (🔄 refresh icon)
 - Visual scope indicators:
   - **🌐 Global Commands** - Available in all projects
   - **📁 Workspace Commands** - Workspace-specific buttons
-- Enhanced tooltips with descriptions and input requirements
-- Inline action icons on hover
+- Enhanced tooltips with both descriptions and input requirements
 
 ✅ **Button Persistence**
-- Workspace-specific (`.vscode/devboost.json`)
-- Global (VS Code state)
+- Workspace-specific: Stored in `.vscode/devboost.json` file
+- Global: Stored in `global-buttons.json` file in VS Code's global storage directory
+  - **macOS/Linux**: `~/.vscode/extensions/.../globalStorage/<publisher>.<extension>/global-buttons.json`
+  - **Windows**: `%APPDATA%\Code\User\globalStorage\<publisher>.<extension>\global-buttons.json`
 - Auto-reload on activation
 - Stores descriptions and input field metadata
 
@@ -227,7 +254,7 @@ When you click the **📝 Git Commit** button:
 - Terminal commands are logged when using integrated terminal
 
 ### Commands not executing?
-- VS Code commands: Check spelling (e.g., `workbench.action.files.save`)
+- VS Code commands: Check spelling (e.g., `workbench.action.files.delete`)
 - Terminal commands: Make sure terminal is available
 - Check the DevBoost output console for errors
 
@@ -238,30 +265,35 @@ When you click the **📝 Git Commit** button:
   - Falls back to smart pattern-based suggestions if unavailable
 - **OS Detection**: Automatically detects Windows, macOS, or Linux and generates compatible commands
 - **Shell Detection**: Detects your shell (bash, zsh, PowerShell, cmd) for accurate command syntax
-- **Activity Logging**: Some VS Code internal commands are not logged to avoid noise
+- **Activity Logging**: Terminal commands are logged with exit code filtering (saves successful, interrupted, and background commands)
+- **Button Storage**: 
+  - Workspace buttons: `.vscode/devboost.json` in your project
+  - Global buttons: `global-buttons.json` in VS Code's global storage directory
 - **Button Limit**: Suggests up to 5 AI-generated buttons per session
 - **Duplicate Prevention**: AI analyzes both command structure and semantic meaning to prevent duplicates
 
 ## 🎨 Customization
 
 ### Button Format
-Buttons are stored as JSON with optional descriptions and input fields:
+Buttons are stored as JSON with dual descriptions and optional input fields:
 ```json
 [
   {
     "name": "🔨 Build",
     "cmd": "npm run build",
-    "description": "Build the project using npm"
+    "user_description": "My custom build script",
+    "ai_description": "Build the project using npm"
   },
   {
     "name": "🧪 Test",
     "cmd": "npm test",
-    "description": "Run all tests in the project"
+    "ai_description": "Run all tests in the project"
   },
   {
     "name": "📝 Git Commit",
     "cmd": "git add . && git commit -m '{message}'",
-    "description": "Stage all changes and commit with a custom message",
+    "user_description": "Quick commit shortcut",
+    "ai_description": "Stage all changes and commit with a custom message",
     "inputs": [
       {
         "placeholder": "Enter commit message",
@@ -272,7 +304,7 @@ Buttons are stored as JSON with optional descriptions and input fields:
   {
     "name": "🌿 Create Branch",
     "cmd": "git checkout -b '{branchName}'",
-    "description": "Create and switch to a new branch",
+    "ai_description": "Create and switch to a new branch",
     "inputs": [
       {
         "placeholder": "Enter branch name",
@@ -290,7 +322,8 @@ You can manually edit `.vscode/devboost.json` to customize buttons!
 {
   "name": "🔧 Custom Deploy",
   "cmd": "npm run build && scp -r dist/ {user}@{host}:/var/www/",
-  "description": "Build and deploy to remote server",
+  "user_description": "Deploy to production server",
+  "ai_description": "Build and deploy to remote server",
   "inputs": [
     {
       "placeholder": "Enter SSH username",

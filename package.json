@@ -40,7 +40,7 @@
       },
       {
         "command": "devboost.smartCmdCreateButtons",
-        "title": "SmartCmd: Create AI Suggested Buttons",
+        "title": "SmartCmd: Create AI Suggested Buttons for this workspace",
         "icon": "$(sparkle)"
       },
       {
@@ -67,6 +67,16 @@
         "command": "devboost.refreshButtons",
         "title": "Refresh Buttons",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "devboost.openButtonsFile",
+        "title": "Open Buttons File",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "devboost.addToGlobal",
+        "title": "Add to Global Buttons",
+        "icon": "$(globe)"
       }
     ],
     "menus": {
@@ -87,19 +97,29 @@
           "group": "inline@3"
         },
         {
-          "command": "devboost.smartCmdCreateCustomButton",
+          "command": "devboost.openButtonsFile",
           "when": "view == devboost.buttonsView && viewItem == section",
           "group": "inline@1"
         },
         {
+          "command": "devboost.smartCmdCreateCustomButton",
+          "when": "view == devboost.buttonsView && viewItem == section",
+          "group": "inline@2"
+        },
+        {
           "command": "devboost.editButton",
-          "when": "view == devboost.buttonsView && viewItem == button",
-          "group": "inline@1"
+          "when": "view == devboost.buttonsView && viewItem =~ /Button$/",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "devboost.addToGlobal",
+          "when": "view == devboost.buttonsView && viewItem == workspaceButton",
+          "group": "1_modify@2"
         },
         {
           "command": "devboost.deleteButton",
-          "when": "view == devboost.buttonsView && viewItem == button",
-          "group": "inline@2"
+          "when": "view == devboost.buttonsView && viewItem =~ /Button$/",
+          "group": "1_modify@3"
         }
       ]
     }

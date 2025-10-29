@@ -3,18 +3,18 @@
 ## Feature Overview
 **Feature Name**: SmartCmd  
 **Parent Project**: DevBoost  
-**Purpose**: SmartCmd is the flagship feature of the DevBoost VS Code extension, designed to enhance developer productivity by automating repetitive tasks through AI-generated buttons. It logs all user terminal commands, file operations (save, create, delete, rename), in the project's `.vscode/activity.log`. An AI model (GitHub Copilot Language Model API with gpt-4o) analyzes these logs to suggest OS-compatible buttons for frequent tasks, displayed in a hierarchical DevBoost sidebar (SmartCmd → Global Commands / Workspace Commands) for one-click execution. Users can also create custom buttons via natural language prompts. Buttons support dynamic input fields using `{variableName}` placeholders that prompt users at execution time. The system includes intelligent duplicate detection using AI-powered semantic analysis. Buttons can be edited (name and description) after creation. Buttons are persisted per project in `.vscode/devboost.json` or globally in VS Code's storage, reloading across sessions. SmartCmd is a core component of DevBoost, a broader productivity suite for developers.
+**Purpose**: SmartCmd is the flagship feature of the DevBoost VS Code extension, designed to enhance developer productivity by automating repetitive tasks through AI-generated buttons. It logs user terminal commands and file operations in `.vscode/activity.log`. An AI model (GitHub Copilot Language Model API with gpt-4o) analyzes these logs to suggest OS-compatible buttons for frequent tasks, displayed in a hierarchical DevBoost sidebar (SmartCmd → Global Commands / Workspace Commands) for one-click execution. Users can also create custom buttons via natural language prompts. Buttons support dynamic input fields using `{variableName}` placeholders that prompt users at execution time. The system includes intelligent duplicate detection using AI-powered semantic analysis. Buttons store two types of descriptions: user_description (user-provided) and ai_description (AI-generated), with backward compatibility for the legacy description field removed. Buttons can be edited via context menu (right-click) after creation, and workspace buttons can be copied to global scope. Buttons are persisted per project in `.vscode/devboost.json` or globally in a `global-buttons.json` file in VS Code's global storage directory, reloading across sessions. SmartCmd is a core component of DevBoost, a broader productivity suite for developers.
 
 **Target Audience**: Software developers with repetitive tasks (e.g., builds, Git operations, file management) across different operating systems (Windows, macOS, Linux).  
 
 ## Feature Details
 ### 1. Activity Logging
 - Tracks:
-  - All terminal commands executed in VS Code's integrated terminal (no filtering).
-  - File operations (save, create, delete, rename).
+  - Terminal commands executed in VS Code's integrated terminal (filtered: saves on success, Ctrl+C, undefined exit codes; skips 127/126).
+  - File operations (create, delete, rename - save operations excluded due to auto-save).
 - Logs stored in `.vscode/activity.log` in the project directory for workspace-specific tracking.
 - Format: `<ISO timestamp> | <type>: <detail>` (e.g., `2025-10-27T10:37:41.083Z | Command: git status`).
-- Uses `onDidStartTerminalShellExecution` event to capture all commands.
+- Uses `onDidEndTerminalShellExecution` event to capture commands with exit code filtering.
 
 ### 2. Hierarchical Sidebar Structure
 - **DevBoost Sidebar**: Main container with rocket icon (🚀) in activity bar.
@@ -54,22 +54,45 @@
 - **Manual Input Detection**: If manually creating buttons, regex detects `{variableName}` patterns and prompts for descriptions.
 
 ### 5. Button Editing
-- Users can edit button name and description after creation.
-- **Edit Icon** (✏️ pencil) appears on hover next to each button (inline action).
-- Two-step process:
+- Users can edit button name and user description after creation via context menu.
+- **Context Menu Access** (right-click on any button):
+  - ✏️ **Edit Button** - Available for both global and workspace buttons
+  - 🌐 **Add to Global Buttons** - Only visible for workspace buttons
+  - 🗑️ **Delete Button** - Available for both global and workspace buttons
+- **Edit Process**:
   1. Edit button name (required, validated for non-empty).
-  2. Edit button description (optional).
-- Command and input fields preserved (cannot be edited to prevent breaking functionality).
-- Changes saved to appropriate storage location (global state or workspace JSON).
+  2. Edit user description (optional).
+- AI description, command, and input fields preserved (cannot be edited to prevent breaking functionality).
+- Changes saved to appropriate storage location (global storage or workspace JSON).
 - Tree view refreshes automatically after edit.
+- **Context Value System**: Buttons use scope-based contextValues ('globalButton' vs 'workspaceButton') for conditional menu visibility.
 
 ### 6. Button Persistence
 - **Workspace-Specific**: Saved in `.vscode/devboost.json`, reloading when the project is reopened.
-- **Global**: Stored in VS Code's global state with key `devboost.globalButtons`, accessible across all projects.
-- Button data structure: `{ name: string, cmd: string, description?: string, inputs?: InputField[], scope?: 'workspace' | 'global' }`.
+- **Global**: Stored in `global-buttons.json` file in VS Code's global storage directory (`context.globalStorageUri.fsPath`), accessible across all projects.
+  - **Location on macOS/Linux**: `~/.vscode/extensions/.../globalStorage/<publisher>.<extension>/global-buttons.json`
+  - **Location on Windows**: `%APPDATA%\Code\User\globalStorage\<publisher>.<extension>\global-buttons.json`
+- Button data structure: `{ name: string, cmd: string, user_description?: string, ai_description?: string, inputs?: InputField[], scope?: 'workspace' | 'global' }`.
+- **Dual Description System**: 
+  - `user_description`: User-provided description
+  - `ai_description`: AI-generated description
+  - Backward compatibility description field removed
 - InputField structure: `{ placeholder: string, variable: string }`.
 
-### 7. Execution
+### 7. Button Scope Management
+- **Add to Global Feature**: Workspace buttons can be copied to global scope via context menu.
+- **Context Menu** (right-click):
+  - "Add to Global Buttons" option only appears for workspace buttons
+  - Checks if button is already global (shows info message if true)
+  - Creates copy with scope changed to 'global'
+  - Uses existing `addButtons()` method with automatic duplicate detection
+  - Saves to `global-buttons.json` file in global storage
+  - Shows success message when added, or warning if duplicate detected
+- **Conditional Menu Visibility**: Uses `viewItem` context in package.json
+  - `viewItem == workspaceButton` → Shows "Add to Global" option
+  - `viewItem =~ /Button$/` → Shows Edit and Delete for all buttons
+
+### 8. Execution
 - Single-word VS Code commands (e.g., `workbench.action.files.save`) executed directly via `vscode.commands.executeCommand`.
 - Multi-word terminal commands (e.g., `npm test && git commit -m 'update'`) sent to integrated terminal via `terminal.sendText()`.
 - **Dynamic Input Handling**:
@@ -82,8 +105,9 @@
 ## Technical Architecture
 ### Components
 - **Logging System**:
-  - Uses VS Code APIs: `workspace.onDidSaveTextDocument`, `workspace.onDidCreateFiles`, `workspace.onDidDeleteFiles`, `workspace.onDidRenameFiles`, `window.onDidStartTerminalShellExecution` (for all terminal commands).
+  - Uses VS Code APIs: `workspace.onDidCreateFiles`, `workspace.onDidDeleteFiles`, `workspace.onDidRenameFiles`, `window.onDidEndTerminalShellExecution` (for terminal commands with exit code filtering).
   - Logs in `.vscode/activity.log` using `fs.promises.appendFile` with ISO timestamp format.
+  - **Exit Code Filtering**: Saves commands with exit code 0 (success), 130 (Ctrl+C), undefined (background); skips 127 (not found), 126 (not executable).
   - Log parser uses regex: `/\d{4}-\d{2}-\d{2}T[\d:.]+Z\s*\|\s*(.+?)\s*:\s*(.+)$/` to extract type and detail.
 
 - **AI Integration**:
@@ -132,13 +156,14 @@
 
 - **Button Management**:
   - **addButtons()**: Returns number of buttons added, validates and checks duplicates.
-  - **editButton()**: Prompts for new name and description, preserves cmd and inputs.
+  - **editButton()**: Prompts for new name and user description, preserves cmd, ai_description, and inputs.
   - **deleteButton()**: Removes from memory and storage, refreshes tree.
+  - **addToGlobal()**: Copies workspace button to global scope with duplicate detection, saves to `global-buttons.json`.
   - **executeButtonCommand()**: Handles input prompts and command execution.
-  - Persists workspace buttons in `.vscode/devboost.json`, global buttons in `context.globalState` with key `devboost.globalButtons`.
-  - Loads buttons on activation using `loadButtons()` method.
-### 1. Activity Logging
-  - Loads buttons on activation using `loadButtons()` method.
+  - Persists workspace buttons in `.vscode/devboost.json`, global buttons in `global-buttons.json` file.
+  - **saveGlobalButtons()**: Writes global buttons to `global-buttons.json` in `context.globalStorageUri.fsPath`.
+  - **saveWorkspaceButtons()**: Writes workspace buttons to `.vscode/devboost.json`.
+  - Loads buttons on activation using `loadButtons()` method from both file locations.
 
 ### File Structure
 - **Project Directory** (e.g., `/my-project/`):
@@ -155,12 +180,14 @@
       {
         "name": "🔨 Build",
         "cmd": "npm run build",
-        "description": "Build the project using npm"
+        "user_description": "My custom build script",
+        "ai_description": "Build the project using npm"
       },
       {
         "name": "📝 Git Commit",
         "cmd": "git add . && git commit -m '{message}'",
-        "description": "Stage all changes and commit with a custom message",
+        "user_description": "Quick commit",
+        "ai_description": "Stage all changes and commit with a custom message",
         "inputs": [
           {
             "placeholder": "Enter commit message",
@@ -171,25 +198,35 @@
       {
         "name": "💾 Save All",
         "cmd": "workbench.action.files.saveAll",
-        "description": "Save all open files"
+        "ai_description": "Save all open files"
       }
     ]
     ```
 - **Extension Directory**:
   - `package.json`: Metadata, commands, contributions (views, menus, commands).
-    - Commands: `devboost.smartCmdCreateButtons`, `devboost.smartCmdCreateCustomButton`, `devboost.executeButton`, `devboost.deleteButton`, `devboost.editButton`, `devboost.refreshButtons`.
-    - Views: `devboost.buttonsView` in `devboost-sidebar` container.
-    - Menus: Action buttons on SmartCmd section, edit/delete buttons on individual buttons.
+    - Commands: `devboost.smartCmdCreateButtons`, `devboost.smartCmdCreateCustomButton`, `devboost.executeButton`, `devboost.deleteButton`, `devboost.editButton`, `devboost.addToGlobal`, `devboost.refreshButtons`, `devboost.openButtonsFile`.
+    - Views: `devboost.buttonsView` in activity bar with rocket icon.
+    - Menus: Context menu items on buttons (`view/item/context`) with conditional visibility using `viewItem` matching.
   - `extension.ts`: Main logic for SmartCmd (TypeScript).
   - No external AI API keys needed - uses built-in VS Code Language Model API.
 - **Global Storage**:
-  - `context.globalState.get('devboost.globalButtons')`: Array of global buttons accessible across all workspaces.
-    ```typescript
+  - Global buttons stored in `global-buttons.json` file at `context.globalStorageUri.fsPath`: Array of global buttons accessible across all workspaces.
+  - **File Location**:
+    - **macOS/Linux**: `~/.vscode/extensions/.../globalStorage/<publisher>.<extension>/global-buttons.json`
+    - **Windows**: `%APPDATA%\Code\User\globalStorage\<publisher>.<extension>\global-buttons.json`
+  - **Format**:
+    ```json
     [
       {
         "name": "🆕 New File Creator",
         "cmd": "workbench.action.files.newUntitledFile",
-        "description": "Creates a new file with prompt for file name"
+        "ai_description": "Creates a new untitled file"
+      },
+      {
+        "name": "💾 Save All Files",
+        "cmd": "workbench.action.files.saveAll",
+        "user_description": "My save all shortcut",
+        "ai_description": "Saves all open files in the workspace"
       }
     ]
     ```
@@ -230,9 +267,9 @@
   - Expects JSON like `[{"name":"Build","cmd":"npm run build"}]`.
 
 - **Button Management**:
-  - Creates buttons using `window.createStatusBarItem`.
-  - Persists workspace buttons in `.vscode/devboost.json`, global buttons in `context.globalState` with key `devboost.globalButtons`.
-  - Loads buttons on extension activation.
+  - Creates buttons displayed in tree view sidebar.
+  - Persists workspace buttons in `.vscode/devboost.json`, global buttons in `global-buttons.json` file in global storage.
+  - Loads buttons on extension activation from both file locations.
 
 ### File Structure
 - **Project Directory** (e.g., `/my-project/`):
@@ -255,7 +292,7 @@
   - `extension.js`: Main logic for SmartCmd.
   - No additional AI dependencies needed (uses existing GitHub Copilot extension).
 - **Global Storage**:
-  - `globalState[devboost.globalButtons]`: e.g., `[{"name":"Open Terminal","cmd":"workbench.action.terminal.toggleTerminal"}]`.
+  - `global-buttons.json` file in global storage directory: e.g., `[{"name":"Open Terminal","cmd":"workbench.action.terminal.toggleTerminal","ai_description":"Opens or closes the integrated terminal"}]`.
 
 ### Dependencies
 - **VS Code API**: For event listeners and status bar management.
@@ -344,12 +381,14 @@ async function getCopilotSuggestion(prompt: string): Promise<string> {
 
 ### 4. Button Persistence
 - **Workspace-Specific**:
-  - Stored in `.vscode/devboost.json`.
+  - Stored in `.vscode/devboost.json` file in project directory.
   - Loaded/saved using `fs.promises.readFile/writeFile`.
 - **Global**:
-  - Stored in `context.globalState` with key `devboost.globalButtons`.
-  - Loaded on activation.
-- **Loading**: Loads global and workspace buttons on activation.
+  - Stored in `global-buttons.json` file in VS Code's global storage directory.
+  - File path: `context.globalStorageUri.fsPath + '/global-buttons.json'`.
+  - Loaded/saved using `fs.promises.readFile/writeFile`.
+  - Directory created automatically if it doesn't exist using `fs.mkdir(path.dirname(globalButtonsPath), { recursive: true })`.
+- **Loading**: Loads global and workspace buttons on activation from their respective file locations.
 
 ### 5. Button Execution
 - **Single-Word Commands**: Executed directly (e.g., `git.commit`).
@@ -381,7 +420,7 @@ async function getCopilotSuggestion(prompt: string): Promise<string> {
 
 ## Current Implementation Status
 ✅ **Completed Features**:
-1. Activity logging with ISO timestamps for all terminal commands
+1. Activity logging with ISO timestamps and exit code filtering (saves 0, 130, undefined; skips 127, 126)
 2. Hierarchical sidebar structure (DevBoost → SmartCmd → Global/Workspace Commands)
 3. OS and shell detection for platform-specific command generation
 4. AI-powered button suggestions using GitHub Copilot Language Model API (gpt-4o)
@@ -389,12 +428,16 @@ async function getCopilotSuggestion(prompt: string): Promise<string> {
 6. Dynamic input fields with `{variableName}` placeholders
 7. Intelligent duplicate detection (normalization + AI semantic analysis)
 8. Scope-aware checking (global vs workspace)
-9. Button editing (name and description)
-10. Button deletion with inline actions
-11. Button persistence (workspace JSON + global state)
-12. Command execution with dynamic input prompts
-13. JSON parsing improvements for nested objects
-14. Tree view with proper alignment and visual indicators
+9. Dual description system (user_description + ai_description)
+10. Button editing via context menu (name and user description only)
+11. Button deletion via context menu
+12. Add to Global feature (copy workspace buttons to global scope)
+13. Context menu system with conditional visibility based on button scope
+14. Button persistence (workspace JSON + global storage file)
+15. Command execution with dynamic input prompts
+16. JSON parsing improvements for nested objects
+17. Tree view with proper alignment and visual indicators
+18. Scope-based contextValues for conditional menu items
 
 ## Future Enhancements
 1. **Button Management**:
@@ -432,13 +475,15 @@ async function getCopilotSuggestion(prompt: string): Promise<string> {
 - **Special Characters in Variables**: Regex escaping ensures proper replacement of `{variables}` with special chars.
 
 ## Key Implementation Files
-- **`src/extension.ts`** (~1200 lines): Main extension logic with all features
+- **`src/extension.ts`** (~1500 lines): Main extension logic with all features
   - Interfaces: `InputField`, `Button`, Tree item classes
   - `ButtonsTreeProvider`: Main tree data provider with hierarchical structure
-  - Button management methods: `addButtons()`, `editButton()`, `deleteButton()`, `checkDuplicate()`
-  - AI integration: `getAISuggestions()`, `getCustomButtonSuggestion()`
+  - Button management methods: `addButtons()`, `editButton()`, `deleteButton()`, `checkDuplicate()`, `addToGlobal()`
+  - Storage methods: `saveGlobalButtons()`, `saveWorkspaceButtons()`, `loadButtons()`
+  - AI integration: `getAISuggestions()`, `getCustomButtonSuggestion()` with streaming responses
   - Utility functions: `getSystemInfo()`, `parseActivityLog()`, `executeButtonCommand()`
-- **`package.json`**: Extension manifest with commands, views, menus, contributions
+- **`package.json`**: Extension manifest with commands, views, menus (context menu), contributions
 - **`.vscode/devboost.json`**: Workspace-specific button storage (per project)
 - **`.vscode/activity.log`**: Activity tracking log (per project)
+- **`global-buttons.json`**: Global button storage in VS Code's global storage directory (all projects)
 
