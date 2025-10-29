@@ -37,6 +37,7 @@ In the Extension Development Host window:
 3. Check the activity log:
    - Navigate to `.vscode/activity.log` in your project
    - You should see logged activities with timestamps
+   - **Note**: Commands executed by SmartCmd buttons are automatically excluded from the log to prevent feedback loops
 
 ### 5. Create AI-Suggested Buttons
 1. After performing various activities, open the **DevBoost sidebar** (🚀 rocket icon)
@@ -52,7 +53,9 @@ In the Extension Development Host window:
 1. Open the **DevBoost sidebar**
 2. Click the **➕ plus icon** on the SmartCmd section (Create Custom Button)
 3. Follow the prompts:
+   - A `prompt-input.md` file will open automatically
    - Enter a description in natural language (e.g., "Button to commit changes with a message")
+   - **Close the file tab** (click the X) when done writing your description
    - Choose scope: "Project Directory" (workspace) or "Global" (all projects)
    - AI will generate:
      * Button name with emoji (e.g., "📝 Git Commit")
@@ -63,6 +66,9 @@ In the Extension Development Host window:
    - When you click the button, you'll be prompted for each input
    - Example: `{message}` → "Enter commit message" prompt
 5. The button will appear in the corresponding section (Global or Workspace)!
+6. **Duplicate Detection**: If creating a button similar to an existing one, you'll get a confirmation dialog
+   - Choose "Add Anyway" to create it despite similarity
+   - Or "Cancel" to abort
 
 ### 7. Use Buttons
 - **Click any button** in the sidebar to execute its command
@@ -88,6 +94,10 @@ In the Extension Development Host window:
    - **Note**: AI description, command, and input fields are preserved
 3. **Add to Global Buttons** (workspace buttons only):
    - Copy a workspace button to global scope
+   - **AI Validation**: The extension checks if the button is suitable for global use
+     - Absolute paths to system tools (e.g., `/usr/bin/git`) are considered safe
+     - Relative paths or project-specific references trigger a warning
+   - You can override the warning and add anyway if needed
    - Makes it available in all projects (saved to `global-buttons.json`)
    - Includes automatic duplicate detection
 4. **Delete Button**: Remove the button from your collection
@@ -101,10 +111,16 @@ In the Extension Development Host window:
 - **Button Persistence**: All buttons persist across VS Code sessions
   - Workspace buttons: Stored in workspace `.vscode/devboost.json`
   - Global buttons: Stored in `global-buttons.json` file in VS Code's global storage directory
+- **Workspace Switching**: When you switch workspaces in the same window:
+  - Activity log path automatically updates
+  - Buttons automatically reload for the new workspace
+  - Extension continues running (no restart needed)
 - **Duplicate Detection**: AI automatically prevents creating similar buttons
   - Compares command structure and functionality
   - Normalizes commands to detect variations (e.g., different variable names)
   - Uses semantic analysis to detect functionally identical buttons
+  - **Single Button Confirmation**: When creating one button similar to existing, you get a choice to add anyway or cancel
+  - **Batch Suggestions**: Multiple similar buttons show summary without individual prompts
   - Scope-aware: Global buttons only check against other global buttons
 - **Button Descriptions**: Two types of descriptions stored for each button
   - **User Description**: Your personal description of what the button does
@@ -181,8 +197,11 @@ When you click the **📝 Git Commit** button:
 ✅ **Activity Logging**
 - File operations (save, create, delete, rename)
 - All terminal commands (comprehensive logging)
+- **Smart Filtering**: Commands executed by SmartCmd buttons are excluded from log
+- Workspace-specific tracking prevents cross-workspace issues
 - Automatic log creation in `.vscode/activity.log`
 - Timestamped entries for activity tracking
+- **Workspace Awareness**: Log path updates automatically when switching workspaces
 
 ✅ **AI Button Generation with GitHub Copilot**
 - **OS-Aware Command Generation**: Detects your OS (Windows/macOS/Linux) and shell
@@ -193,6 +212,8 @@ When you click the **📝 Git Commit** button:
 
 ✅ **Custom Button Creation**
 - Natural language descriptions (e.g., "button to commit with message")
+- **Prompt Input File**: Uses dedicated file for description entry
+- **Smart File Closure Detection**: Proceeds only when you actually close the file tab
 - **AI-powered generation** using GitHub Copilot Language Model API
 - **Dynamic Input Fields**: Support for commands requiring user input
   - Uses `{variableName}` placeholders in commands
@@ -206,6 +227,8 @@ When you click the **📝 Git Commit** button:
 - **Two-layer detection system**:
   1. Command normalization (removes quotes, whitespace, normalizes variables)
   2. AI-powered semantic similarity analysis
+- **User Confirmation**: Single duplicate shows dialog with "Add Anyway" or "Cancel"
+- **Batch Handling**: Multiple duplicates show summary without prompting
 - Prevents creating functionally identical buttons
 - Compares command structure and purpose
 - Works across different variable names and syntax variations
@@ -216,6 +239,8 @@ When you click the **📝 Git Commit** button:
 - **Context menu actions** (right-click on buttons):
   - ✏️ Edit button name and user description
   - 🌐 Add to Global Buttons (workspace buttons only)
+    - **AI Validation**: Smart detection of absolute vs relative paths
+    - **Warning Dialog**: Alerts for workspace-specific buttons with override option
   - 🗑️ Delete button
 - **Dual description system**:
   - User description (your custom description)
@@ -233,13 +258,23 @@ When you click the **📝 Git Commit** button:
   - **Windows**: `%APPDATA%\Code\User\globalStorage\<publisher>.<extension>\global-buttons.json`
 - Auto-reload on activation
 - Stores descriptions and input field metadata
+- **Workspace Switching**: Automatically reloads buttons when switching workspaces
 
 ✅ **Command Execution**
 - VS Code commands (single word)
 - Terminal commands (multi-word, OS-specific)
 - **Variable replacement**: Prompts for input and replaces placeholders
+- **Command Tracking**: Executed commands excluded from activity log per workspace
 - Git workflow automation
 - Multi-step commands with `&&` operators
+
+✅ **Extension Architecture**
+- **Code Modularization**: 
+  - `src/extension.ts` (1148 lines) - Main extension logic
+  - `src/aiServices.ts` (472 lines) - AI/LLM interactions isolated
+- **Extension Lifecycle**: Separate instance per VS Code window
+- **Memory Management**: Smart cleanup of workspace-specific data
+- **Workspace Awareness**: Persists when switching folders in same window
 
 ## 🐛 Troubleshooting
 
@@ -266,11 +301,19 @@ When you click the **📝 Git Commit** button:
 - **OS Detection**: Automatically detects Windows, macOS, or Linux and generates compatible commands
 - **Shell Detection**: Detects your shell (bash, zsh, PowerShell, cmd) for accurate command syntax
 - **Activity Logging**: Terminal commands are logged with exit code filtering (saves successful, interrupted, and background commands)
+- **SmartCmd Command Exclusion**: Commands executed by SmartCmd buttons are automatically excluded from activity log per workspace
+- **Workspace Awareness**: Extension persists when switching workspaces; activity log and buttons update automatically
+- **Extension Architecture**: Code split into main logic (extension.ts) and AI services (aiServices.ts) for better maintainability
 - **Button Storage**: 
   - Workspace buttons: `.vscode/devboost.json` in your project
   - Global buttons: `global-buttons.json` in VS Code's global storage directory
+  - Prompt input: `prompt-input.md` in global storage for custom button creation
 - **Button Limit**: Suggests up to 5 AI-generated buttons per session
 - **Duplicate Prevention**: AI analyzes both command structure and semantic meaning to prevent duplicates
+  - Single duplicate: User confirmation dialog
+  - Multiple duplicates: Summary warning
+- **Global Scope Validation**: Smart detection of absolute vs relative paths with user override option
+- **Modal Dialogs**: Critical decisions use modal dialogs that stay open until user responds
 
 ## 🎨 Customization
 
