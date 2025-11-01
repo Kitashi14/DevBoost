@@ -1,19 +1,28 @@
 // AI Services Module - All LLM-related functions
 import * as vscode from 'vscode';
+import { smartCmdButton } from './treeProvider';
+import * as path from 'path';
 
-// Button interface (duplicated from extension.ts for type safety)
-export interface Button {
-	name: string;
-	cmd: string;
-	user_description?: string;
-	ai_description?: string;
-	inputs?: InputField[];
-	scope?: 'workspace' | 'global';
-}
+// Get system information for AI context
+function getSystemInfo(): { platform: string; shell: string} {
+	// Determine OS
+	let platform = 'Unknown';
+	if (process.platform === 'win32') {
+		platform = 'Windows';
+	} else if (process.platform === 'darwin') {
+		platform = 'macOS';
+	} else if (process.platform === 'linux') {
+		platform = 'Linux';
+	}
 
-export interface InputField {
-	placeholder: string;
-	variable: string;
+	// Get shell information
+	const shell = process.env.SHELL || process.env.COMSPEC || 'Unknown shell';
+	const shellName = path.basename(shell).replace(/\.(exe|com|bat)$/i, '');
+
+	return {
+		platform,
+		shell: shellName
+	};
 }
 
 /**
@@ -21,8 +30,8 @@ export interface InputField {
  * Returns the name of the existing button if duplicate found, null otherwise
  */
 export async function checkDuplicateButton(
-	newButton: Button,
-	existingButtons: Button[],
+	newButton: smartCmdButton,
+	existingButtons: smartCmdButton[],
 	targetScope: 'workspace' | 'global'
 ): Promise<string | null> {
 	if (existingButtons.length === 0) {
@@ -134,7 +143,7 @@ If it's unique, respond with only "UNIQUE".`;
 /**
  * Check if a button is safe to add to global scope using AI
  */
-export async function checkIfButtonIsGlobalSafe(button: Button): Promise<boolean> {
+export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise<boolean> {
 	try {
 		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
 		
@@ -201,9 +210,7 @@ Respond with ONLY one word:
  */
 export async function getAISuggestions(
 	topActivities: string[],
-	platform: string,
-	shell: string
-): Promise<Button[]> {
+): Promise<smartCmdButton[]> {
 	try {
 		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
 		
@@ -213,6 +220,7 @@ export async function getAISuggestions(
 		}
 
 		const model = models[0];
+		const { platform, shell } = getSystemInfo();
 		
 		const prompt = 
 		`Based on the following user activities in VS Code, suggest 3-5 one-click command buttons that would be helpful.
@@ -270,7 +278,7 @@ Only respond with the JSON array, no additional text.`;
 
 		const jsonMatch = fullResponse.match(/\[[\s\S]*\]/);
 		if (jsonMatch) {
-			const buttons = JSON.parse(jsonMatch[0]) as Button[];
+			const buttons = JSON.parse(jsonMatch[0]) as smartCmdButton[];
 			console.log('Parsed buttons from AI response:', buttons);
 			return buttons.filter(b => b.name && b.cmd);
 		}
@@ -295,9 +303,7 @@ Only respond with the JSON array, no additional text.`;
  */
 export async function getCustomButtonSuggestion(
 	description: string,
-	platform: string,
-	shell: string
-): Promise<Button | null> {
+): Promise<smartCmdButton | null> {
 	try {
 		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
 		
@@ -307,6 +313,7 @@ export async function getCustomButtonSuggestion(
 		}
 
 		const model = models[0];
+		const { platform, shell } = getSystemInfo();
 		
 		const prompt = `Create a VS Code button based on this description: "${description}"
 
@@ -368,7 +375,7 @@ Only respond with the JSON object, no additional text.`;
 			
 			if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
 				const jsonString = cleanedResponse.substring(firstBrace, lastBrace + 1);
-				const button = JSON.parse(jsonString) as Button;
+				const button = JSON.parse(jsonString) as smartCmdButton;
 				
 				if (button.name && button.cmd && button.ai_description) {
 					button.user_description = description;
@@ -398,8 +405,8 @@ Only respond with the JSON object, no additional text.`;
 /**
  * Fallback suggestions based on common patterns
  */
-export function getFallbackSuggestions(topActivities: string[]): Button[] {
-	const buttons: Button[] = [];
+export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[] {
+	const buttons: smartCmdButton[] = [];
 	const activityString = topActivities.join(' ').toLowerCase();
 
 	if (activityString.includes('git') || activityString.includes('commit')) {
