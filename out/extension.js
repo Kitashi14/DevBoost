@@ -167,9 +167,6 @@ class ButtonsTreeProvider {
         // Root level: show SmartCmd parent
         if (!element) {
             const totalButtons = this.buttons.length;
-            if (totalButtons === 0) {
-                return Promise.resolve([]);
-            }
             return Promise.resolve([new SmartCmdTreeItem(totalButtons)]);
         }
         // If element is SmartCmd, return sections (Global and Workspace)

@@ -179,9 +179,6 @@ class ButtonsTreeProvider implements vscode.TreeDataProvider<TreeItemBase> {
 		// Root level: show SmartCmd parent
 		if (!element) {
 			const totalButtons = this.buttons.length;
-			if (totalButtons === 0) {
-				return Promise.resolve([]);
-			}
 			return Promise.resolve([new SmartCmdTreeItem(totalButtons)]);
 		}
 
