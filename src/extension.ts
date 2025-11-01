@@ -8,6 +8,24 @@ import { activateSmartCmd } from './smartCmd/activateExt';
 // Global variables
 let activityLogPath: string | undefined;
 
+// Flag to track if prompt file is currently in use
+let isPromptFileInUse = false;
+
+// Helper function to acquire prompt file lock
+export function acquirePromptFileLock(): boolean {
+	if (isPromptFileInUse) {
+		vscode.window.showWarningMessage('DevBoost: Prompt file is currently in use. Please finish current task by closing the prompt-input.md file.');
+		return false;
+	}
+	isPromptFileInUse = true;
+	return true;
+}
+
+// Helper function to release prompt file lock
+export function releasePromptFileLock(): void {
+	isPromptFileInUse = false;
+}
+
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
@@ -30,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// // Activate SmartCmd tool
 	await activateSmartCmd(context, globalStoragePath, activityLogPath, promptInputPath);
 
-	// Register other commands (non-SmartCmd)
+	// Register test Command
 	const helloWorldDisposable = vscode.commands.registerCommand('DevBoost.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from DevBoost!');
 	});
