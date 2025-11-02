@@ -2,6 +2,52 @@
 import * as vscode from 'vscode';
 import { smartCmdButton } from './treeProvider';
 import * as path from 'path';
+import * as fs from 'fs/promises';
+
+// Development mode flag - set to false in production
+const ENABLE_PROMPT_LOGGING = true;
+
+/**
+ * Log AI prompts to file for development/debugging purposes
+ */
+async function logPromptToFile(functionName: string, prompt: string, metadata?: any): Promise<void> {
+	if (!ENABLE_PROMPT_LOGGING) {
+		return;
+	}
+
+	try {
+		// Get workspace folder for log file
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (!workspaceFolder) {
+			return;
+		}
+
+		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'ai_prompts.log');
+		
+		// Ensure directory exists
+		await fs.mkdir(path.dirname(logFilePath), { recursive: true });
+
+		const timestamp = new Date().toISOString();
+		const logEntry = `
+${'='.repeat(80)}
+TIMESTAMP: ${timestamp}
+FUNCTION: ${functionName}
+METADATA: ${metadata ? JSON.stringify(metadata, null, 2) : 'N/A'}
+${'='.repeat(80)}
+
+${prompt}
+
+${'='.repeat(80)}
+
+`;
+
+		// Append to log file
+		await fs.appendFile(logFilePath, logEntry, 'utf-8');
+		console.log(`DevBoost: Logged prompt from ${functionName} to ${logFilePath}`);
+	} catch (error) {
+		console.error('DevBoost: Error logging prompt to file:', error);
+	}
+}
 
 // Get system information for AI context
 function getSystemInfo(): { platform: string; shell: string} {
@@ -116,6 +162,13 @@ If it's a duplicate/similar, respond with JSON containing the existing button's 
 
 If it's unique, respond with only "UNIQUE".`;
 
+		// Log prompt for development
+		await logPromptToFile('checkDuplicateButton', prompt, {
+			newButton: { name: newButton.name, cmd: newButton.cmd },
+			targetScope,
+			existingButtonsCount: buttonsToCheck.length
+		});
+
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
@@ -222,6 +275,12 @@ Respond with ONLY one word:
 - "SAFE" if the button can be used globally across all projects
 - "UNSAFE" if the button is workspace-specific and shouldn't be global`;
 
+		// Log prompt for development
+		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, {
+			button: { name: button.name, cmd: button.cmd },
+			currentScope: button.scope
+		});
+
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
         console.log('DevBoost: Global safety check prompt:', prompt);
@@ -246,8 +305,7 @@ Respond with ONLY one word:
  * Get AI suggestions for buttons based on activity patterns
  */
 export async function getAISuggestions(
-	optimizedLog: { summary: string; recentLogs: string[] },
-	detailedContext?: any
+	optimizedLog: { summary: string; recentLogs: string[] }
 ): Promise<smartCmdButton[]> {
 	try {
 		// Log ALL available Copilot models first
@@ -266,43 +324,12 @@ export async function getAISuggestions(
 
 		const model = models[0];
 		const { platform, shell } = getSystemInfo();
-		
-	// Build enhanced context information for better AI suggestions
-	let contextualInfo = '';
-	
-	if (detailedContext) {
-		// Advanced project structure analysis
-		const directories = detailedContext.frequentDirectories || [];
-		const workspaceName = detailedContext.workspaceInfo.names[0] || 'project';
-	
-		contextualInfo = `
-📊 Workspace Context:
-- Workspace: ${workspaceName}
-- Active workspaces: ${detailedContext.workspaceInfo.count}
-- Directory complexity: ${directories.length} frequent locations
-
-📍 Frequent Directory Mapping (USE THESE FOR NAVIGATION):
-${detailedContext.frequentDirectories.map((dir: string, i: number) => {
-			const shortPath = dir.split('/').slice(-2).join('/');
-			return `${i + 1}. ${shortPath} → Full: ${dir}`;
-		}).join('\n')}
-
-⚡ Terminal Intelligence:
-- Primary shell: ${detailedContext.terminalPatterns.mostUsed}
-- Usage patterns: ${Object.entries(detailedContext.terminalPatterns.shells).map(([shell, count]) => `${shell}(${count}x)`).join(', ')}
-
-${Object.keys(detailedContext.errorPatterns).length > 0 ? `
-🚨 FAILURE ANALYSIS (CREATE BETTER ALTERNATIVES):
-${Object.entries(detailedContext.errorPatterns).slice(0, 3).map(([error, count]) => `• ${error} (${count}x failures)`).join('\n')}
-` : ''}`;
-	}
 	
 	const prompt = 
 	`You are an elite DevOps automation expert creating intelligent command buttons for a developer's specific workflow.
 
 🖥️  SYSTEM ENVIRONMENT:
 - OS: ${platform} | Shell: ${shell}
-${contextualInfo}
 
 📊 STATISTICAL OVERVIEW:
 ${optimizedLog.summary}
@@ -320,18 +347,6 @@ ${optimizedLog.recentLogs.join('\n')}
 5. **FAILURE-PROOF DESIGN**: Address commands that failed (non-zero exit codes)
 6. **CHAIN INTELLIGENCE**: Create buttons that automate entire workflows, not just single commands
 
-🧠 INTELLIGENT COMMAND DESIGN PRINCIPLES:
-
-❌ TRY TO AVOID (can be included if frequently used alone):
-- Single commands like "npm install" or "git status"
-- Commands that ignore the sequential workflow context
-- Location-blind commands that will fail in wrong directories
-
-✅ CREATE (Smart/Workflow-Based):
-- Commands that chain frequently-used sequences you see in the logs
-- Multi-step workflows that solve complete tasks
-- Directory-aware commands that cd to the right location first
-- Error-resilient commands that handle common failures
 
 EXAMPLES OF SMART BUTTONS FROM SEQUENTIAL ANALYSIS:
 • If you see: "npm install" → "npm run build" → "npm test" repeatedly IN SAME TERMINAL
@@ -356,14 +371,13 @@ EXAMPLES OF SMART BUTTONS FROM SEQUENTIAL ANALYSIS:
 🔧 ${platform} COMMAND REQUIREMENTS:
 ${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed' : ''}
 ${platform === 'macOS' || platform === 'Linux' ? '• Use && for chaining, Unix paths, proper shell escaping' : ''}
-• All commands must work reliably in ${detailedContext?.terminalPatterns?.mostUsed || shell}
+• All commands must work reliably in ${shell}
 • Include error handling where appropriate (|| echo "Error occurred")
 
-🚨 CRITICAL RULE - EMOJIS:
+🚨 IMPORTANT RULE - EMOJIS:
 • ONLY use emoji/icon in the "name" field at the beginning (e.g., "🚀 Build Project")
 • NEVER use emojis, icons, or special characters in the "cmd" field - it must be plain terminal command text only
 • NEVER use emojis, icons, or special characters in the "ai_description" field
-• Violation of this rule will cause command execution failures
 
 📝 RESPONSE FORMAT (JSON only):
 
@@ -415,15 +429,15 @@ WRONG FORMAT (DO NOT DO THIS):
     }
 ]
 
-🎯 QUALITY CHECKLIST:
-- Each button represents a REAL workflow pattern from the sequential logs
-- Commands chain multiple steps that you observed happening together
-- Buttons save time by automating repetitive sequences
-- All commands include proper directory context from the logs
-- Descriptions reference the actual workflow patterns detected
-
 Analyze the sequential logs carefully and generate 3-5 buttons that automate the ACTUAL workflows you observe.
 RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
+
+		// Log prompt for development
+		await logPromptToFile('getAISuggestions', prompt, {
+			platform,
+			shell,
+			recentLogsCount: optimizedLog.recentLogs.length,
+		});
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('AI button suggestions prompt:', prompt);
@@ -559,6 +573,15 @@ WRONG FORMAT (DO NOT DO THIS):
 }
 
 Only respond with the JSON object, no additional text.`;
+
+		// Log prompt for development
+		await logPromptToFile('getCustomButtonSuggestion', prompt, {
+			description,
+			scope,
+			platform,
+			shell,
+			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name
+		});
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('Custom button prompt:', prompt);

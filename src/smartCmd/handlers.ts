@@ -57,8 +57,6 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 		const optimizedLog = await activityLogging.optimizeLogForAI(activityLogPath);
 
 		// Extract detailed context for AI analysis
-		const detailedContext = activityLogging.extractDetailedLogContext(logContent);
-		console.log('DevBoost: Detailed context for AI:', detailedContext);
 		console.log('DevBoost: Recent logs count:', optimizedLog.recentLogs.length);
 
 		if (optimizedLog.recentLogs.length < 5) {
@@ -79,7 +77,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 			title: "Analyzing your workflow patterns...",
 			cancellable: false
 		}, async (progress) => {
-			return await aiServices.getAISuggestions(optimizedLog, detailedContext);
+			return await aiServices.getAISuggestions(optimizedLog);
 		});
 
 		if (buttons.length === 0) {
