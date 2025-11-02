@@ -210,6 +210,7 @@ Respond with ONLY one word:
  */
 export async function getAISuggestions(
 	topActivities: string[],
+	detailedContext?: any
 ): Promise<smartCmdButton[]> {
 	try {
 		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
@@ -222,47 +223,173 @@ export async function getAISuggestions(
 		const model = models[0];
 		const { platform, shell } = getSystemInfo();
 		
-		const prompt = 
-		`Based on the following user activities in VS Code, suggest 3-5 one-click command buttons that would be helpful.
+	// Build enhanced context information for better AI suggestions
+	let contextualInfo = '';
+	let projectStructureInfo = '';
+	let intelligentSuggestions = '';
+	let workflowInsights = '';
+	
+	if (detailedContext) {
+		// Advanced project structure analysis
+		const directories = detailedContext.frequentDirectories || [];
+		const workspaceName = detailedContext.workspaceInfo.names[0] || 'project';
+		
+		// Detect technology patterns
+		const hasBackendFrontend = directories.some((d: string) => d.includes('/backend') || d.includes('/frontend'));
+		const hasReactNext = directories.some((d: string) => d.includes('node_modules') || d.includes('src') || d.includes('pages'));
+		const hasNodeProject = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
+			cmd.includes('npm') || cmd.includes('yarn') || cmd.includes('node') || cmd.includes('📦'));
+		const hasGitUsage = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
+			cmd.includes('git') || cmd.includes('🌿'));
+		const hasBuildCommands = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
+			cmd.includes('build') || cmd.includes('compile') || cmd.includes('🔨'));
+		const hasTestCommands = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
+			cmd.includes('test') || cmd.includes('spec') || cmd.includes('🧪'));
+		const failedCommands = Object.keys(detailedContext.errorPatterns || {});
+		
+		// Analyze workflow patterns
+		const topCommands = Object.entries(detailedContext.commandPatterns).slice(0, 5);
+		const isDevWorkflow = topCommands.some(([cmd]) => cmd.includes('start') || cmd.includes('dev') || cmd.includes('serve'));
+		const isGitHeavy = topCommands.some(([cmd]) => cmd.includes('git') || cmd.includes('🌿'));
+		const isMultiDirectory = directories.length > 2;
+		
+		// Generate detailed project analysis
+		projectStructureInfo = '\nPROJECT INTELLIGENCE ANALYSIS:';
+		if (hasBackendFrontend) {
+			projectStructureInfo += '\n• 🏗️  Multi-tier architecture detected (backend/frontend separation)';
+		}
+		if (hasNodeProject) {
+			projectStructureInfo += '\n• 📦 Node.js/npm ecosystem detected';
+		}
+		if (hasReactNext) {
+			projectStructureInfo += '\n• ⚛️  Frontend framework usage patterns detected';
+		}
+		if (hasGitUsage) {
+			projectStructureInfo += '\n• 🌿 Active Git version control workflow';
+		}
+		if (hasBuildCommands) {
+			projectStructureInfo += '\n• 🔨 Build/compilation pipeline detected';
+		}
+		if (hasTestCommands) {
+			projectStructureInfo += '\n• 🧪 Testing workflow present';
+		}
+		
+		// Generate workflow insights
+		workflowInsights = '\nWORKFLOW PATTERN INSIGHTS:';
+		if (isDevWorkflow) {
+			workflowInsights += '\n• 🚀 Active development workflow - prioritize dev server commands';
+		}
+		if (isGitHeavy) {
+			workflowInsights += '\n• 🔄 Git-centric workflow - suggest branch/commit helpers';
+		}
+		if (isMultiDirectory) {
+			workflowInsights += '\n• 📂 Multi-directory navigation - commands MUST include directory changes';
+		}
+		if (failedCommands.length > 0) {
+			workflowInsights += '\n• ⚠️  Error patterns detected - prioritize fixing failed commands';
+		}
+		
+		// Generate highly specific intelligent suggestions
+		intelligentSuggestions = `
+🧠 CONTEXT-DRIVEN BUTTON STRATEGY:
+${hasBackendFrontend ? '🎯 PRIORITY: Create directory-specific commands for backend/frontend workflows' : ''}
+${hasNodeProject ? '🎯 PRIORITY: npm/yarn commands with correct directory context (cd dir && npm action)' : ''}
+${failedCommands.length > 0 ? '🎯 CRITICAL: Address these failures - ' + failedCommands.slice(0, 2).join(', ') : ''}
+${hasGitUsage ? '🎯 ENHANCE: Git workflow automation (branch management, smart commits)' : ''}
+${isDevWorkflow ? '🎯 OPTIMIZE: Development server management and hot-reload workflows' : ''}
 
-SYSTEM INFORMATION:
-- Operating System: ${platform}
-- Shell: ${shell}
+MANDATORY COMMAND PATTERNS:
+• Always include "cd [directory] &&" before actions that need specific locations
+• Chain related actions (install + start, build + deploy, etc.)
+• Use relative paths that work from any starting directory
+• Include error handling for common failure points`;
+		contextualInfo = `
+🔍 ENHANCED WORKFLOW INTELLIGENCE:
+${detailedContext.summary}
+${projectStructureInfo}
+${workflowInsights}
 
-Activities:
+📊 Workspace Context:
+- Project: ${workspaceName}
+- Active workspaces: ${detailedContext.workspaceInfo.count}
+- Directory complexity: ${directories.length} frequent locations
+
+⚡ Terminal Intelligence:
+- Primary shell: ${detailedContext.terminalPatterns.mostUsed}
+- Usage patterns: ${Object.entries(detailedContext.terminalPatterns.shells).map(([shell, count]) => `${shell}(${count}x)`).join(', ')}
+
+📍 Critical Directory Mapping (USE THESE FOR NAVIGATION):
+${detailedContext.frequentDirectories.map((dir: string, i: number) => {
+			const shortPath = dir.split('/').slice(-2).join('/');
+			return `${i + 1}. ${shortPath} → Full: ${dir}`;
+		}).join('\n')}
+
+📈 Command Usage Intelligence:
+${Object.entries(detailedContext.commandPatterns).slice(0, 6).map(([cmd, count]) => 
+			`• ${cmd}: ${count}x${cmd.includes('npm') ? ' (Node.js)' : ''}${cmd.includes('git') ? ' (Git)' : ''}${cmd.includes('cd') ? ' (Navigation)' : ''}`
+		).join('\n')}
+
+${Object.keys(detailedContext.errorPatterns).length > 0 ? `
+🚨 FAILURE ANALYSIS (CREATE BETTER ALTERNATIVES):
+${Object.entries(detailedContext.errorPatterns).slice(0, 3).map(([error, count]) => `• ${error} (${count}x failures)`).join('\n')}
+` : ''}${intelligentSuggestions}`;
+	}
+	
+	const prompt = 
+	`You are an elite DevOps automation expert creating intelligent command buttons for a developer's specific workflow.
+
+🖥️  SYSTEM ENVIRONMENT:
+- OS: ${platform} | Shell: ${shell}
+${contextualInfo}
+
+📋 USER ACTIVITY ANALYSIS:
 ${topActivities.map((activity, i) => `${i + 1}. ${activity}`).join('\n')}
 
-IMPORTANT: Generate commands that are compatible with ${platform} and ${shell}.
-${platform === 'Windows' ? '- Use Windows-compatible commands (e.g., "dir" instead of "ls", proper path separators)' : ''}
-${platform === 'macOS' || platform === 'Linux' ? '- Use Unix/Linux-compatible commands' : ''}
+🎯 CRITICAL SUCCESS CRITERIA:
+1. **DIRECTORY-FIRST THINKING**: Every command MUST consider WHERE it should run
+2. **CONTEXT-AWARE CHAINING**: Combine navigation + action in single commands
+3. **FAILURE-PROOF DESIGN**: Address known error patterns with robust alternatives
+4. **WORKFLOW-SPECIFIC**: Tailor to detected patterns (dev/git/build/test)
+5. **MULTI-STEP INTELLIGENCE**: Chain related actions for efficiency
 
-For each button, provide:
-1. A short descriptive name (with an emoji prefix)
-2. The exact command to execute (terminal command or VS Code command) - MUST be compatible with ${platform}
-3. A brief description of what the button does (this will be stored as ai_description)
-4. Optional input fields if the command needs user input (use {variableName} as placeholder in cmd)
+🧠 INTELLIGENT COMMAND DESIGN PRINCIPLES:
 
-Format your response as JSON array:
+❌ AVOID (Generic/Dumb):
+- "npm install" (location-blind)
+- "npm start" (will fail in wrong dir)
+- "git status" (too basic)
+- Single-purpose commands that ignore context
+
+✅ CREATE (Smart/Contextual):
+- "cd backend && npm install && npm run dev" (location + action + goal)
+- "cd frontend && npm ci && npm start" (faster install + start)
+- "git status && git branch -v && git log --oneline -5" (comprehensive git overview)
+- Multi-step workflows that solve complete tasks
+
+🔧 ${platform} COMMAND REQUIREMENTS:
+${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed' : ''}
+${platform === 'macOS' || platform === 'Linux' ? '• Use && for chaining, Unix paths, proper shell escaping' : ''}
+• All commands must work reliably in ${detailedContext?.terminalPatterns?.mostUsed || shell}
+• Include error handling where appropriate (|| echo "Error occurred")
+
+📝 RESPONSE FORMAT (JSON only):
 [
     {
-        "name": "🔨 Build Project",
-        "cmd": "npm run build",
-        "ai_description": "Builds the project using npm"
-    },
-    {
-        "name": "📝 Git Commit",
-        "cmd": "git add . && git commit -m '{message}'",
-        "ai_description": "Stage all changes and commit with a message",
-        "inputs": [
-            {
-                "placeholder": "Enter commit message",
-                "variable": "{message}"
-            }
-        ]
+        "name": "🚀 [Action] [Context]",
+        "cmd": "cd [specific-dir] && [primary-action] && [secondary-action]",
+        "ai_description": "Contextual explanation of WHY this command is intelligent for this workflow"
     }
 ]
 
-Only respond with the JSON array, no additional text.`;
+🎯 QUALITY CHECKLIST:
+- Each command includes proper directory navigation
+- Commands solve complete workflows, not just single actions
+- Names clearly indicate the smart action being performed
+- Descriptions explain the intelligent reasoning behind the command
+- All commands are tailored to the detected project structure
+
+Generate 3-5 buttons that demonstrate sophisticated understanding of this specific workflow.
+RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('AI button suggestions prompt:', prompt);

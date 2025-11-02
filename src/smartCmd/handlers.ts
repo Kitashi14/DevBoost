@@ -53,11 +53,18 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 			return;
 		}
 
-		// Parse and analyze activities
-		const activities = activityLogging.parseActivityLog(logContent);
+		// Optimize log for AI consumption
+		const optimizedLogContent = await activityLogging.optimizeLogForAI(activityLogPath);
+
+		// Parse and analyze activities using optimized content
+		const activities = activityLogging.parseActivityLog(optimizedLogContent);
 		console.log('DevBoost: Parsed activities:', activities);
 		const topActivities = activityLogging.getTopActivities(activities, 5);
 		console.log('DevBoost: Top activities:', topActivities);
+
+		// Extract detailed context for AI analysis using optimized content
+		const detailedContext = activityLogging.extractDetailedLogContext(optimizedLogContent);
+		console.log('DevBoost: Detailed context for AI:', detailedContext);
 
 		if (topActivities.length < 3) {
 			vscode.window.showInformationMessage(
@@ -71,17 +78,84 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 			return;
 		}
 
-		// Get AI suggestions from GitHub Copilot
+		// Get AI suggestions from GitHub Copilot with enhanced context
 		vscode.window.showInformationMessage('Analyzing your workflow patterns...');
-		const buttons = await aiServices.getAISuggestions(topActivities);
+		const buttons = await aiServices.getAISuggestions(topActivities, detailedContext);
 
 		if (buttons.length === 0) {
 			vscode.window.showWarningMessage('Could not generate button suggestions. Please try again.');
 			return;
 		}
 
+		// Show confirmation dialog with preview of AI-suggested buttons
+		const previewMessage = `AI has analyzed your workflow and suggests ${buttons.length} button${buttons.length > 1 ? 's' : ''}:
+
+${buttons.map((btn, i) => `${i + 1}. **${btn.name}**
+   Command: ${btn.cmd}
+   Description: ${btn.ai_description}`).join('\n\n')}
+
+Do you want to create these buttons?`;
+
+		const choice = await vscode.window.showInformationMessage(
+			previewMessage,
+			{ modal: true },
+			'✅ Create All Buttons',
+			'👀 Review Individual Buttons',
+			'❌ Cancel'
+		);
+
+		if (choice === '❌ Cancel') {
+			vscode.window.showInformationMessage('Button creation cancelled.');
+			return;
+		}
+
+		let finalButtons = buttons;
+
+		if (choice === '👀 Review Individual Buttons') {
+			finalButtons = [];
+			
+			for (const button of buttons) {
+				const buttonChoice = await vscode.window.showInformationMessage(
+					`Review Button: **${button.name}**\n\nCommand: ${button.cmd}\nDescription: ${button.ai_description}\n\nWhat would you like to do?`,
+					{ modal: true },
+					'✅ Accept',
+					'✏️ Edit Description',
+					'❌ Skip'
+				);
+
+				if (buttonChoice === '✅ Accept') {
+					finalButtons.push(button);
+				} else if (buttonChoice === '✏️ Edit Description') {
+					const editedDescription = await vscode.window.showInputBox({
+						prompt: 'Edit the AI-generated description',
+						value: button.ai_description,
+						placeHolder: 'Enter a better description for this button',
+						validateInput: (value) => {
+							if (!value || value.trim().length === 0) {
+								return 'Description cannot be empty';
+							}
+							return null;
+						}
+					});
+
+					if (editedDescription) {
+						finalButtons.push({
+							...button,
+							ai_description: editedDescription.trim()
+						});
+					}
+				}
+				// Skip button if '❌ Skip' is chosen
+			}
+
+			if (finalButtons.length === 0) {
+				vscode.window.showInformationMessage('No buttons were selected.');
+				return;
+			}
+		}
+
 		// Add buttons to tree view
-		const addedCount = await buttonsProvider.addButtons(buttons, 'workspace');
+		const addedCount = await buttonsProvider.addButtons(finalButtons, 'workspace');
 
 		if (addedCount > 0) {
 			vscode.window.showInformationMessage(`✨ Created ${addedCount} AI-suggested button${addedCount > 1 ? 's' : ''}!`);
@@ -167,7 +241,9 @@ async function createCustomButtonInternal(
 			let resolved = false;
 			
 			const checkAndResolve = async () => {
-				if (resolved) return;
+				if (resolved) {
+					return;
+				}
 				
 				// Check if document is still open in tabs
 				const isOpen = vscode.window.tabGroups.all
@@ -256,12 +332,65 @@ async function createCustomButtonInternal(
 				return;
 			}
 
+			// Show confirmation dialog with AI-generated details
+			const confirmationMessage = `AI has generated the following button:
+
+📋 **Button Details:**
+• Name: ${button.name}
+• Command: ${button.cmd}
+• AI Description: ${button.ai_description}
+• Your Description: ${button.user_description}
+${button.inputs ? `• Inputs: ${button.inputs.map(i => i.placeholder).join(', ')}` : ''}
+
+Do you want to create this button?`;
+
+			const choice = await vscode.window.showInformationMessage(
+				confirmationMessage,
+				{ modal: true },
+				'✅ Create Button',
+				'✏️ Edit AI Description',
+				'❌ Cancel'
+			);
+
+			if (choice === '❌ Cancel') {
+				vscode.window.showInformationMessage('Button creation cancelled.');
+				return;
+			}
+
+			let finalButton = button;
+
+			if (choice === '✏️ Edit AI Description') {
+				// Allow user to edit the AI description
+				const editedDescription = await vscode.window.showInputBox({
+					prompt: 'Edit the AI-generated description',
+					value: button.ai_description,
+					placeHolder: 'Enter a better description for this button',
+					validateInput: (value) => {
+						if (!value || value.trim().length === 0) {
+							return 'Description cannot be empty';
+						}
+						return null;
+					}
+				});
+
+				if (!editedDescription) {
+					vscode.window.showInformationMessage('Button creation cancelled.');
+					return;
+				}
+
+				// Update the button with edited description
+				finalButton = {
+					...button,
+					ai_description: editedDescription.trim()
+				};
+			}
+
 			// Add button to tree view
 			const scopeType = scope === 'Global' ? 'global' : 'workspace';
-			const addedCount = await buttonsProvider.addButtons([button], scopeType);
+			const addedCount = await buttonsProvider.addButtons([finalButton], scopeType);
 
 			if (addedCount > 0) {
-				vscode.window.showInformationMessage(`✅ Created custom button: ${button.name}`);
+				vscode.window.showInformationMessage(`✅ Created custom button: ${finalButton.name}`);
 			}
 		});
 
@@ -271,14 +400,44 @@ async function createCustomButtonInternal(
 	}
 }
 
-// Execute button command with input field support
-export async function executeButtonCommand(button: smartCmdButton) {
+// Execute button command with input field support and correct working directory context
+export async function executeButtonCommand(button: smartCmdButton, activityLogPath?: string | undefined) {
 	if (!button || !button.cmd || button.cmd.trim().length === 0) {
 		vscode.window.showWarningMessage('No command specified. Please provide a valid command to execute.');
 		return;
 	}
 
 	let finalCommand = button.cmd.trim();
+	const executionStartTime = Date.now();
+	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+	// Try to get the most appropriate working directory from activity log context
+	let targetWorkingDirectory = workspacePath; // Default fallback
+	
+	if (activityLogPath) {
+		try {
+			await fs.access(activityLogPath);
+			const optimizedLogContent = await activityLogging.optimizeLogForAI(activityLogPath);
+			const detailedContext = activityLogging.extractDetailedLogContext(optimizedLogContent);
+			
+			// Use the most frequently used directory that's within the current workspace
+			if (detailedContext.frequentDirectories.length > 0) {
+				for (const dir of detailedContext.frequentDirectories) {
+					// Ensure the directory is within the current workspace
+					if (workspacePath && dir.startsWith(workspacePath)) {
+						targetWorkingDirectory = dir;
+						break;
+					}
+				}
+				// If no workspace-relative directory found, use the most frequent one
+				if (targetWorkingDirectory === workspacePath && detailedContext.frequentDirectories[0]) {
+					targetWorkingDirectory = detailedContext.frequentDirectories[0];
+				}
+			}
+		} catch (error) {
+			console.log('DevBoost: Could not extract working directory context, using workspace root');
+		}
+	}
 
 	// Handle input fields if present
 	if (button.inputs && button.inputs.length > 0) {
@@ -308,6 +467,19 @@ export async function executeButtonCommand(button: smartCmdButton) {
 	if (!finalCommand.includes(' ') && !finalCommand.includes('&&') && !finalCommand.includes('||') && !finalCommand.includes(';')) {
 		try {
 			await vscode.commands.executeCommand(finalCommand);
+			
+			// Log successful VS Code command execution with enhanced context
+			await activityLogging.logSmartCmdExecution(
+				button.name, 
+				finalCommand, 
+				'VSCode', 
+				activityLogPath,
+				{
+					duration: Date.now() - executionStartTime,
+					workingDirectory: targetWorkingDirectory
+				}
+			);
+			
 			vscode.window.showInformationMessage(`Executed VS Code command: ${finalCommand}`);
 			return;
 		} catch (error) {
@@ -316,7 +488,7 @@ export async function executeButtonCommand(button: smartCmdButton) {
 		}
 	}
 
-	// Execute as terminal command
+	// Execute as terminal command with correct working directory
 	try {
 		const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('DevBoost');
 		terminal.show();
@@ -324,9 +496,44 @@ export async function executeButtonCommand(button: smartCmdButton) {
 		// Track this command as tool-executed to exclude from activity log
 		activityLogging.markCommandAsToolExecuted(finalCommand);
 		
+		// Navigate to the correct directory before executing the command
+		// Only change directory if we have a specific target and it's different from workspace root
+		if (targetWorkingDirectory && targetWorkingDirectory !== workspacePath) {
+			// Use cross-platform cd command
+			const cdCommand = process.platform === 'win32' ? `cd /d "${targetWorkingDirectory}"` : `cd "${targetWorkingDirectory}"`;
+			terminal.sendText(cdCommand);
+			
+			// Wait a moment for directory change to complete
+			await new Promise(resolve => setTimeout(resolve, 100));
+		}
+		
+		// Log terminal command execution with enhanced context including actual working directory
+		await activityLogging.logSmartCmdExecution(
+			button.name, 
+			finalCommand, 
+			'Terminal', 
+			activityLogPath,
+			{
+				terminalName: terminal.name,
+				terminalId: terminal.processId?.toString(),
+				workingDirectory: targetWorkingDirectory
+			}
+		);
+		
 		terminal.sendText(finalCommand);
-		vscode.window.setStatusBarMessage(`⚡ Executed: ${button.name}`, 3000);
+		vscode.window.setStatusBarMessage(`⚡ Executed: ${button.name} (in ${path.basename(targetWorkingDirectory || workspacePath || 'unknown')})`, 3000);
 	} catch (error) {
+		// Log execution error with enhanced context
+		await activityLogging.logSmartCmdExecution(
+			button.name, 
+			finalCommand, 
+			'Error', 
+			activityLogPath,
+			{
+				workingDirectory: targetWorkingDirectory
+			}
+		);
+		
 		vscode.window.showErrorMessage(`Failed to execute command: ${button.name}`);
 		console.error('Command execution error:', error);
 	}
