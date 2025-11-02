@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as aiServices from './aiServices';
 import * as activityLogging from '../activityLogging';
 import { smartCmdButton, InputField, SmartCmdButtonsTreeProvider } from './treeProvider';
+import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
 
 // Create AI-suggested buttons based on activity log
 export async function createAIButtons( activityLogPath: string | undefined, buttonsProvider: SmartCmdButtonsTreeProvider) {
@@ -180,6 +181,25 @@ Do you want to create these buttons?`;
 
 // Create custom button from user description
 export async function createCustomButton(
+	promptInputPath: string | undefined,
+	buttonsProvider: SmartCmdButtonsTreeProvider,
+	scopeInput?: 'Workspace' | 'Global'
+) {
+	// Try to acquire the prompt file lock
+	if (!acquirePromptFileLock()) {
+		return;
+	}
+
+	try {
+		await createCustomButtonInternal(promptInputPath, buttonsProvider, scopeInput);
+	} finally {
+		// Always release the lock when done
+		releasePromptFileLock();
+	}
+}
+
+// Internal function to handle the actual button creation logic
+async function createCustomButtonInternal(
 	promptInputPath: string | undefined,
 	buttonsProvider: SmartCmdButtonsTreeProvider,
 	scopeInput?: 'Workspace' | 'Global'
