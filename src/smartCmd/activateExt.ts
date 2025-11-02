@@ -40,7 +40,7 @@ export async function activateSmartCmd(
 	buttonsProvider.loadButtons();
 
 	// Register SmartCmd commands
-	const createAIButtonsDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateAIButtons', async () => {
+	const createAIButtonsDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateButtons', async () => {
 		await handlers.createAIButtons(activityLogPath, buttonsProvider);
 	});
 
@@ -78,7 +78,7 @@ export async function activateSmartCmd(
 			return;
 		}
 		
-		await handlers.executeButtonCommand(button);
+		await handlers.executeButtonCommand(button, activityLogPath);
 	});
 
 	const deleteButtonDisposable = vscode.commands.registerCommand('devboost.deleteButton', async (item: any) => {

@@ -265,8 +265,9 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 
 		if (validButtons.length === 0) {
 			if (invalidButtons.length === 0) {
-				if(duplicateButtons.length > 1) 
+				if(duplicateButtons.length > 1) {
 					vscode.window.showInformationMessage('All buttons are similar to existing ones. No new buttons added.');
+				}
 			} else {
 				vscode.window.showWarningMessage('DevBoost: No valid buttons to add.');
 			}
