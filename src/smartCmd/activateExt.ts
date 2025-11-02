@@ -45,17 +45,14 @@ export async function activateSmartCmd(
 	});
 
 	const createCustomButtonDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateCustomButton', async (sectionObj: any) => {
-		const scope = await vscode.window.showQuickPick(['Workspace', 'Global'], { 
-			placeHolder: 'Where should this button be available?' 
-		});
-		
-		if (scope) {
-			if (scope === 'Global') {
+
+		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
+			if(sectionObj.section == 'global') 
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Global');
-			} else {
+			else 
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Workspace');
-			}
-		} else {
+		}
+		else {
 			await handlers.createCustomButton(promptInputPath, buttonsProvider);
 		}
 	});

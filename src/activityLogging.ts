@@ -3,16 +3,11 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Track commands executed by tools per workspace to exclude from activity log
-// Key: workspace folder path, Value: Set of executed commands
-const toolExecutedCommands = new Map<string, Set<string>>();
-
 // Log configuration settings
 const LOG_CONFIG = {
 	MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB max file size
-	MAX_ENTRIES: 1000, // Maximum number of log entries to keep
+	MAX_ENTRIES: 500, // Maximum number of log entries to keep
 	CLEANUP_INTERVAL: 24 * 60 * 60 * 1000, // Clean up every 24 hours
-	COMPRESSION_THRESHOLD: 500 // Compress old entries when count exceeds this
 };
 
 // Enhanced logging interface for contextual information
@@ -20,12 +15,12 @@ interface LogContext {
 	terminalId?: string;
 	terminalName?: string;
 	shellType?: string;
-	workingDirectory?: string;
+	currentDirectory?: string;
 	exitCode?: number;
-	duration?: number;
-	userId?: string;
-	sessionId?: string;
 }
+
+// Track current working directory for each terminal
+const terminalDirectories = new Map<string, string>();
 
 /**
  * Get system information for AI context
@@ -54,13 +49,19 @@ function getSystemInfo(): { platform: string; shell: string} {
 /**
  * Setup activity logging system
  * Logs file operations and terminal commands to workspace activity log
+ * Returns cleanup timer if scheduled
  */
-export function setupActivityLogging(context: vscode.ExtensionContext, activityLogPath: string | undefined) {
+export function setupActivityLogging(
+	context: vscode.ExtensionContext, 
+	activityLogPath: string | undefined
+): { cleanupTimer?: NodeJS.Timeout } {
+	let cleanupTimer: NodeJS.Timeout | undefined;
+	
 	// Schedule periodic log cleanup if we have a log path
 	if (activityLogPath) {
-		const cleanupTimer = scheduleLogCleanup(activityLogPath);
+		cleanupTimer = scheduleLogCleanup(activityLogPath);
 		context.subscriptions.push({
-			dispose: () => clearInterval(cleanupTimer)
+			dispose: () => clearInterval(cleanupTimer!)
 		});
 		
 		// Perform initial cleanup on startup (but don't await to avoid blocking)
@@ -68,14 +69,28 @@ export function setupActivityLogging(context: vscode.ExtensionContext, activityL
 			console.error('DevBoost: Initial log cleanup failed:', error);
 		});
 	}
+	
+	// Clean up terminal directory tracking when terminals are closed
+	context.subscriptions.push(
+		vscode.window.onDidCloseTerminal(async (terminal) => {
+			try {
+				const pid = await terminal.processId;
+				if (pid) {
+					terminalDirectories.delete(pid.toString());
+					console.log(`DevBoost: Cleaned up directory tracking for terminal ${pid}`);
+				}
+			} catch (error) {
+				// Ignore errors
+			}
+		})
+	);
 
 	// Log file create operations
 	context.subscriptions.push(
 		vscode.workspace.onDidCreateFiles(async (event) => {
 			for (const file of event.files) {
 				const logContext: LogContext = {
-					workingDirectory: path.dirname(file.fsPath),
-					sessionId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+					currentDirectory: path.dirname(file.fsPath)
 				};
 				await logActivity('Create', file.fsPath, activityLogPath, logContext);
 			}
@@ -87,8 +102,7 @@ export function setupActivityLogging(context: vscode.ExtensionContext, activityL
 		vscode.workspace.onDidDeleteFiles(async (event) => {
 			for (const file of event.files) {
 				const logContext: LogContext = {
-					workingDirectory: path.dirname(file.fsPath),
-					sessionId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+					currentDirectory: path.dirname(file.fsPath)
 				};
 				await logActivity('Delete', file.fsPath, activityLogPath, logContext);
 			}
@@ -100,8 +114,7 @@ export function setupActivityLogging(context: vscode.ExtensionContext, activityL
 		vscode.workspace.onDidRenameFiles(async (event) => {
 			for (const rename of event.files) {
 				const logContext: LogContext = {
-					workingDirectory: path.dirname(rename.newUri.fsPath),
-					sessionId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+					currentDirectory: path.dirname(rename.newUri.fsPath)
 				};
 				await logActivity('Rename', `${rename.oldUri.fsPath} to ${rename.newUri.fsPath}`, activityLogPath, logContext);
 			}
@@ -115,56 +128,84 @@ export function setupActivityLogging(context: vscode.ExtensionContext, activityL
 			const command = commandLine.trim();
 			const exitCode = event.exitCode;
 			
+			// Try to get CWD from shell integration if available
+			const executionCwd = event.execution.cwd;
+			
 			// Get current workspace path for tracking
 			const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			
-			// Skip commands executed by tools in this workspace
-			if (workspacePath) {
-				const workspaceCommands = toolExecutedCommands.get(workspacePath);
-				if (workspaceCommands?.has(command)) {
-					console.log(`DevBoost: Skipping tool-executed command in workspace: ${command}`);
-					workspaceCommands.delete(command); // Clean up after tracking
-					
-					// Clean up empty sets to prevent memory leaks
-					if (workspaceCommands.size === 0) {
-						toolExecutedCommands.delete(workspacePath);
-					}
-					return;
-				}
+		// Gather enhanced context information
+		const terminal = event.terminal;
+		
+		// Get terminal process ID (it's a Promise, so we need to await it)
+		let terminalId: string | undefined;
+		try {
+			const pid = await terminal.processId;
+			terminalId = pid?.toString();
+		} catch (error) {
+			// If we can't get the process ID, just skip it
+			terminalId = undefined;
+		}
+		
+		// Initialize terminal directory tracking if this is a new terminal
+		if (terminalId && !terminalDirectories.has(terminalId)) {
+			// If shell integration provides CWD, use it (most reliable!)
+			if (executionCwd) {
+				terminalDirectories.set(terminalId, executionCwd.fsPath);
+			} else {
+				// Fallback to workspace path
+				terminalDirectories.set(terminalId, workspacePath || process.cwd());
 			}
-			
-			// Gather enhanced context information
-			const terminal = event.terminal;
-			
-			// Build enhanced context
-			const logContext: LogContext = {
-				terminalId: terminal.processId?.toString(),
-				terminalName: terminal.name,
-				shellType: getSystemInfo().shell,
-				workingDirectory: workspacePath,
-				exitCode: exitCode,
-				sessionId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-			};
-			
-			// Add working directory from terminal if available
+		}
+		
+		// Get current tracked directory for this terminal
+		// Prefer shell integration CWD if available, otherwise use tracked directory
+		let currentDirectory = executionCwd?.fsPath || (terminalId ? terminalDirectories.get(terminalId) : workspacePath);
+		
+		// Update tracked directory with actual CWD from shell integration
+		if (executionCwd && terminalId) {
+			terminalDirectories.set(terminalId, executionCwd.fsPath);
+			currentDirectory = executionCwd.fsPath;
+		}
+		
+		// Build enhanced context
+		const logContext: LogContext = {
+			terminalId: terminalId,
+			terminalName: terminal.name,
+			shellType: getSystemInfo().shell,
+			currentDirectory: currentDirectory,
+			exitCode: exitCode
+		};
+		
+		// Track directory changes from 'cd' commands (only needed if shell integration unavailable)
+		if (!executionCwd) {
 			try {
-				// Try to get the current working directory from the terminal
-				// This is a best effort approach since VS Code API doesn't directly expose CWD
-				if (event.execution.commandLine.value.includes('cd ')) {
-					const cdMatch = event.execution.commandLine.value.match(/cd\s+([^\s;]+)/);
-					if (cdMatch && cdMatch[1]) {
-						logContext.workingDirectory = path.resolve(workspacePath || '', cdMatch[1]);
+				// Match 'cd' only at the start of the command (not in chains or strings)
+				const cdMatch = event.execution.commandLine.value.match(/^\s*cd\s+([^\s;&|]+)/);
+				if (cdMatch && cdMatch[1] && terminalId) {
+					const targetPath = cdMatch[1];
+					
+					// Check if it's an absolute path (Unix: starts with /, Windows: starts with C:\ etc.)
+					const isAbsolutePath = targetPath.startsWith('/') || /^[A-Z]:\\/i.test(targetPath);
+					
+					if (isAbsolutePath) {
+						// Absolute path - use directly (most reliable)
+						terminalDirectories.set(terminalId, targetPath);
+						logContext.currentDirectory = targetPath;
+					} else {
+						// Relative path - resolve from current directory
+						const newDir = path.resolve(currentDirectory || workspacePath || '', targetPath);
+						terminalDirectories.set(terminalId, newDir);
+						logContext.currentDirectory = newDir;
 					}
 				}
 			} catch (error) {
 				// Ignore errors in CWD detection
 			}
+		}
 			
-			// Log successful commands (exit code 0) and interrupted commands (exit code 130, SIGINT)
 			// Skip commands with exit code 127 (command not found) and 126 (command not executable)
-			if (exitCode === 0 || exitCode === 130 || exitCode === undefined) {
-				await logActivity('Command', command, activityLogPath, logContext);
-			} else if (exitCode === 127 || exitCode === 126) {
+			if (exitCode === 127 || exitCode === 126) {
 				console.log(`DevBoost: Skipping invalid command (exit code ${exitCode}): ${command}`);
 			} else {
 				// Log other non-zero exit codes but still save them as they might be valid commands that failed for other reasons
@@ -172,6 +213,69 @@ export function setupActivityLogging(context: vscode.ExtensionContext, activityL
 			}
 		})
 	);
+
+	// Log task executions
+	const taskStartTimes = new Map<string, number>();
+	
+	context.subscriptions.push(
+		vscode.tasks.onDidStartTask(async (event) => {
+			const task = event.execution.task;
+			const taskKey = `${task.name}-${task.source}`;
+			taskStartTimes.set(taskKey, Date.now());
+			
+			const logContext: LogContext = {
+				currentDirectory: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+			};
+			
+			const taskDetail = `${task.name} [${task.source}]`;
+			await logActivity('TaskStart', taskDetail, activityLogPath, logContext);
+		})
+	);
+	
+	context.subscriptions.push(
+		vscode.tasks.onDidEndTask(async (event) => {
+			const task = event.execution.task;
+			const taskKey = `${task.name}-${task.source}`;
+			const startTime = taskStartTimes.get(taskKey);
+			const duration = startTime ? Date.now() - startTime : undefined;
+			taskStartTimes.delete(taskKey);
+			
+			const logContext: LogContext = {
+				currentDirectory: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+				exitCode: 0 // Tasks don't provide exit codes directly
+			};
+			
+			const taskDetail = duration 
+				? `${task.name} [${task.source}] (${Math.round(duration/1000)}s)`
+				: `${task.name} [${task.source}]`;
+			await logActivity('TaskEnd', taskDetail, activityLogPath, logContext);
+		})
+	);
+
+	// Log debug sessions
+	context.subscriptions.push(
+		vscode.debug.onDidStartDebugSession(async (session) => {
+			const logContext: LogContext = {
+				currentDirectory: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+			};
+			
+			const debugDetail = `${session.name} (${session.type})`;
+			await logActivity('DebugStart', debugDetail, activityLogPath, logContext);
+		})
+	);
+	
+	context.subscriptions.push(
+		vscode.debug.onDidTerminateDebugSession(async (session) => {
+			const logContext: LogContext = {
+				currentDirectory: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+			};
+			
+			const debugDetail = `${session.name} (${session.type})`;
+			await logActivity('DebugEnd', debugDetail, activityLogPath, logContext);
+		})
+	);
+	
+	return { cleanupTimer };
 }
 
 /**
@@ -194,14 +298,12 @@ export async function logActivity(type: string, detail: string, activityLogPath:
 		const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || 'unknown';
 		const workspaceName = vscode.workspace.workspaceFolders?.[0]?.name || 'unknown';
 		
-		// Build enhanced context information
+		// Build enhanced context information (timestamp already in log line prefix, no need to duplicate)
 		const contextInfo: any = {
 			workspace: {
 				path: workspacePath,
 				name: workspaceName
-			},
-			system: getSystemInfo(),
-			timestamp: timestamp
+			}
 		};
 
 		// Add terminal-specific context if provided
@@ -215,30 +317,13 @@ export async function logActivity(type: string, detail: string, activityLogPath:
 			if (context.shellType) {
 				contextInfo.terminal = { ...contextInfo.terminal, shell: context.shellType };
 			}
-			if (context.workingDirectory) {
-				contextInfo.terminal = { ...contextInfo.terminal, cwd: context.workingDirectory };
+			if (context.currentDirectory) {
+				contextInfo.terminal = { ...contextInfo.terminal, cwd: context.currentDirectory };
 			}
 			if (context.exitCode !== undefined) {
 				contextInfo.execution = { exitCode: context.exitCode };
 			}
-			if (context.duration !== undefined) {
-				contextInfo.execution = { ...contextInfo.execution, duration: context.duration };
-			}
-			if (context.userId) {
-				contextInfo.user = { id: context.userId };
-			}
-			if (context.sessionId) {
-				contextInfo.session = { id: context.sessionId };
-			}
 		}
-
-		// Create structured log entry for better AI parsing
-		const logEntry = {
-			timestamp,
-			type: type.trim(),
-			detail: detail.trim(),
-			context: contextInfo
-		};
 
 		// Format as JSON for structured logging but also maintain human readable format
 		const structuredLog = `${timestamp} | ${type.trim()}: ${detail.trim()} | Context: ${JSON.stringify(contextInfo)}\n`;
@@ -258,46 +343,6 @@ export async function logActivity(type: string, detail: string, activityLogPath:
 }
 
 /**
- * Mark a command as executed by a tool to exclude it from activity log
- * Call this before executing a command through a tool (e.g., SmartCmd button)
- */
-export function markCommandAsToolExecuted(command: string) {
-	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (workspacePath) {
-		if (!toolExecutedCommands.has(workspacePath)) {
-			toolExecutedCommands.set(workspacePath, new Set());
-		}
-		toolExecutedCommands.get(workspacePath)!.add(command);
-	}
-}
-
-/**
- * Log SmartCmd button execution with enhanced context
- */
-export async function logSmartCmdExecution(
-	buttonName: string, 
-	command: string, 
-	executionType: 'VSCode' | 'Terminal' | 'Error',
-	activityLogPath: string | undefined,
-	additionalContext?: Partial<LogContext>
-) {
-	const executionStartTime = Date.now();
-	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-
-	const logContext: LogContext = {
-		workingDirectory: workspacePath,
-		sessionId: `smartcmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-		userId: `button-${buttonName}`,
-		...additionalContext
-	};
-
-	const logType = `SmartCmd-${executionType}`;
-	const logDetail = `${buttonName}: ${command}`;
-
-	await logActivity(logType, logDetail, activityLogPath, logContext);
-}
-
-/**
  * Parse activity log and count frequencies with enhanced context support
  */
 export function parseActivityLog(logContent: string): Map<string, number> {
@@ -308,7 +353,6 @@ export function parseActivityLog(logContent: string): Map<string, number> {
 		// Match enhanced format: 2025-10-27T10:37:41.083Z | Type: detail | Context: {...}
 		const enhancedMatch = line.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*\|\s*(.+?)\s*:\s*(.+?)\s*\|\s*Context:\s*(.+)$/);
 		if (enhancedMatch) {
-			const timestamp = enhancedMatch[1].trim();
 			const type = enhancedMatch[2].trim();
 			const detail = enhancedMatch[3].trim();
 			const contextStr = enhancedMatch[4].trim();
@@ -359,14 +403,11 @@ export function extractDetailedLogContext(logContent: string): {
 	workspaceInfo: any;
 	terminalPatterns: any;
 	frequentDirectories: string[];
-	commandPatterns: any;
 	errorPatterns: any;
 } {
 	const lines = logContent.split('\n').filter(line => line.trim().length > 0);
 	const workspaces = new Set<string>();
-	const terminals = new Map<string, number>();
 	const directories = new Map<string, number>();
-	const commands = new Map<string, number>();
 	const errors = new Map<string, number>();
 	const shells = new Map<string, number>();
 	
@@ -388,18 +429,12 @@ export function extractDetailedLogContext(logContent: string): {
 					shells.set(context.terminal.shell, (shells.get(context.terminal.shell) || 0) + 1);
 				}
 				
-				// Extract directory patterns
+				// Extract directory patterns (CRITICAL - enables directory-aware commands)
 				if (context.terminal?.cwd) {
 					directories.set(context.terminal.cwd, (directories.get(context.terminal.cwd) || 0) + 1);
 				}
 				
-				// Extract command patterns
-				if (type === 'Command' || type.startsWith('SmartCmd')) {
-					const commandBase = detail.split(' ')[0]; // Get base command
-					commands.set(commandBase, (commands.get(commandBase) || 0) + 1);
-				}
-				
-				// Extract error patterns
+				// Extract error patterns (CRITICAL - helps AI suggest fixes)
 				if (context.execution?.exitCode && context.execution.exitCode !== 0) {
 					errors.set(`${detail} (exit ${context.execution.exitCode})`, (errors.get(`${detail} (exit ${context.execution.exitCode})`) || 0) + 1);
 				}
@@ -428,7 +463,6 @@ export function extractDetailedLogContext(logContent: string): {
 			mostUsed: mostUsedShell
 		},
 		frequentDirectories: topDirectories,
-		commandPatterns: Object.fromEntries(Array.from(commands.entries()).slice(0, 10)),
 		errorPatterns: Object.fromEntries(errors)
 	};
 }
@@ -481,7 +515,13 @@ export async function cleanupActivityLog(activityLogPath: string): Promise<void>
 		// Clean up old backup files (keep only last 3)
 		await cleanupBackupFiles(path.dirname(activityLogPath));
 		
-	} catch (error) {
+	} catch (error: any) {
+		// If file doesn't exist yet, that's fine - nothing to clean up
+		if (error.code === 'ENOENT') {
+			console.log('DevBoost: Activity log file does not exist yet, skipping cleanup');
+			return;
+		}
+		// Log other errors for debugging
 		console.error('DevBoost: Error during activity log cleanup:', error);
 	}
 }
@@ -518,40 +558,71 @@ async function cleanupBackupFiles(directory: string): Promise<void> {
 }
 
 /**
- * Optimize log for AI consumption by summarizing old entries
+ * Get recent sequential logs for AI analysis (preserves workflow order)
+ * Returns up to maxEntries recent log entries in their original sequential format
  */
-export async function optimizeLogForAI(activityLogPath: string): Promise<string> {
+export async function getRecentSequentialLogs(activityLogPath: string, maxEntries: number = LOG_CONFIG.MAX_ENTRIES/2): Promise<string[]> {
 	if (!activityLogPath) {
-		return '';
+		return [];
 	}
 
 	try {
 		const logContent = await fs.readFile(activityLogPath, 'utf-8');
-		const lines = logContent.split('\n').filter(line => line.trim().length > 0);
+		const lines = logContent.split('\n').filter(line => {
+			const trimmed = line.trim();
+			// Filter out empty lines and comment lines from previous compression
+			return trimmed.length > 0 && !trimmed.startsWith('#');
+		});
 		
-		if (lines.length <= LOG_CONFIG.COMPRESSION_THRESHOLD) {
-			return logContent; // No optimization needed
-		}
+		// Return the most recent entries in sequential order
+		return lines.slice(-maxEntries);
+		
+	} catch (error) {
+		console.error('DevBoost: Error getting recent sequential logs:', error);
+		return [];
+	}
+}
 
-		// Split into recent (full detail) and old (summarized) entries
-		const recentLines = lines.slice(-LOG_CONFIG.COMPRESSION_THRESHOLD);
-		const oldLines = lines.slice(0, -LOG_CONFIG.COMPRESSION_THRESHOLD);
+/**
+ * Optimize log for AI consumption using intelligent sampling
+ * Combines: statistical summary + recent sequential logs
+ */
+export async function optimizeLogForAI(activityLogPath: string): Promise<{
+	summary: string;
+	recentLogs: string[];
+}> {
+	if (!activityLogPath) {
+		return { summary: '', recentLogs: [] };
+	}
+
+	try {
+		const logContent = await fs.readFile(activityLogPath, 'utf-8');
+		const lines = logContent.split('\n').filter(line => {
+			const trimmed = line.trim();
+			return trimmed.length > 0 && !trimmed.startsWith('#');
+		});
 		
-		// Create summary of old entries
-		const oldActivities = parseActivityLog(oldLines.join('\n'));
-		const topOldActivities = getTopActivities(oldActivities, 20);
+		// Get statistical summary
+		const activities = parseActivityLog(logContent);
+		console.log('DevBoost: Parsed activities from log:', activities);
+		const topActivities = getTopActivities(activities, 10);
+		console.log('DevBoost: Top activities:', topActivities);
 		
-		const summary = `# Activity Summary (${oldLines.length} entries compressed)\n` +
-			`# Time range: ${oldLines[0]?.substring(0, 19)} to ${oldLines[oldLines.length - 1]?.substring(0, 19)}\n` +
-			`# Most frequent activities:\n` +
-			topOldActivities.map((activity, i) => `# ${i + 1}. ${activity} (${oldActivities.get(activity)} times)`).join('\n') +
-			'\n# --- Recent Detailed Activity ---\n';
+		const summary = `Log Statistics (${lines.length} total entries):
+Top Activities:
+${topActivities.map((activity, i) => `${i + 1}. ${activity} (${activities.get(activity)}x)`).join('\n')}`;
+
+		// Get recent sequential logs (last 250 entries) - this provides full context
+		const recentLogs = await getRecentSequentialLogs(activityLogPath, LOG_CONFIG.MAX_ENTRIES/2);
 		
-		return summary + recentLines.join('\n');
+		return {
+			summary,
+			recentLogs
+		};
 		
 	} catch (error) {
 		console.error('DevBoost: Error optimizing log for AI:', error);
-		return '';
+		return { summary: '', recentLogs: [] };
 	}
 }
 

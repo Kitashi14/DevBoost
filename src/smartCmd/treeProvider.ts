@@ -215,61 +215,89 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 
 		// Validate buttons and check for duplicates
 		const validButtons: smartCmdButton[] = [];
-		const duplicateButtons: Array<{newName: string, existingName: string, button: smartCmdButton}> = [];
+		const duplicateButtons: Array<{newButton: smartCmdButton, existingButton: smartCmdButton}> = [];
 		const invalidButtons: number[] = [];
 
-		for (let i = 0; i < buttons.length; i++) {
-			const b = buttons[i];
-			
-			// Check if button is valid
-			if (!b.name || !b.cmd || b.name.trim().length === 0 || b.cmd.trim().length === 0) {
-				console.warn('DevBoost: Skipping invalid button:', b);
-				invalidButtons.push(i);
-				continue;
+		// Use withProgress for duplicate checking since it calls AI
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: "Checking for duplicate buttons",
+			cancellable: false
+		}, async (progress) => {
+			for (let i = 0; i < buttons.length; i++) {
+				const b = buttons[i];
+				
+				// Check if button is valid
+				if (!b.name || !b.cmd || b.name.trim().length === 0 || b.cmd.trim().length === 0) {
+					console.warn('DevBoost: Skipping invalid button:', b);
+					invalidButtons.push(i);
+					continue;
+				}
+
+				// Check for duplicates using AI-powered semantic comparison
+				progress.report({ message: `${i + 1}/${buttons.length}` });
+				const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope);
+
+				if (duplicateButton) {
+					duplicateButtons.push({newButton: b, existingButton: duplicateButton});
+					console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateButton.name + ')');
+				} else {
+					validButtons.push(b);
+				}
 			}
+		});
 
-			// Check for duplicates using AI-powered semantic comparison
-			const duplicateInfo = await aiServices.checkDuplicateButton(b, this.buttons, scope);
-
-			if (duplicateInfo) {
-				duplicateButtons.push({newName: b.name, existingName: duplicateInfo, button: b});
-				console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateInfo + ')');
-			} else {
-				validButtons.push(b);
-			}
-		}
-
-		// Show feedback about duplicates
+		// Show feedback about duplicates - ask for confirmation one by one
 		if (duplicateButtons.length > 0) {
-			if (duplicateButtons.length === 1) {
-				// If there's only one duplicate, ask user for confirmation
-				const dup = duplicateButtons[0];
+			for (const dup of duplicateButtons) {
+				const confirmationMessage = `This button appears similar to an existing one:
+
+New Button:
+• Name: ${dup.newButton.name}
+• Command: ${dup.newButton.cmd}
+• Description: ${dup.newButton.ai_description || dup.newButton.user_description || 'N/A'}
+• Scope: ${scope === 'global' ? 'Global' : 'Workspace'}
+
+Existing Similar Button:
+• Name: ${dup.existingButton.name}
+• Command: ${dup.existingButton.cmd}
+• Description: ${dup.existingButton.ai_description || dup.existingButton.user_description || 'N/A'}
+• Scope: ${dup.existingButton.scope === 'global' ? 'Global' : 'Workspace'}
+
+What would you like to do?`;
+
 				const result = await vscode.window.showWarningMessage(
-					`DevBoost: Button "${dup.newName}" appears to be similar to existing button "${dup.existingName}". Do you want to add it anyway?`,
+					confirmationMessage,
 					{ modal: true },
-					'Add Anyway'
+					'Add Anyway',
+					'Replace Existing',
+					'Skip'
 				);
 				
-				// If user chose to add anyway, move it to valid buttons
 				if (result === 'Add Anyway') {
-					validButtons.push(dup.button);
-					duplicateButtons.length = 0; // Clear duplicates array since we're adding it
-				} else {
-					vscode.window.showInformationMessage('DevBoost: Button addition cancelled.');
+					// Add the new button alongside the existing one
+					validButtons.push(dup.newButton);
+				} else if (result === 'Replace Existing') {
+					// Remove the existing button and add the new one
+					const existingIndex = this.buttons.findIndex(
+						b => b.name === dup.existingButton.name && 
+						     b.cmd === dup.existingButton.cmd && 
+						     b.scope === dup.existingButton.scope
+					);
+					if (existingIndex !== -1) {
+						this.buttons.splice(existingIndex, 1);
+					}
+					validButtons.push(dup.newButton);
 				}
-			} else {
-				const dupMsg = `Suggested new ${duplicateButtons.length} buttons are similar to existing ones: ${duplicateButtons.slice(0, 3).map(d => `"${d.newName}"`).join(', ')}${duplicateButtons.length > 3 ? '...' : ''}`;
-				vscode.window.showWarningMessage(`DevBoost: ${dupMsg}`);
+				// If 'Skip' or closed dialog, do nothing (button not added to validButtons)
 			}
 		}
 
 		if (validButtons.length === 0) {
-			if (invalidButtons.length === 0) {
-				if(duplicateButtons.length > 1) {
-					vscode.window.showInformationMessage('All buttons are similar to existing ones. No new buttons added.');
-				}
-			} else {
+			if (invalidButtons.length > 0) {
 				vscode.window.showWarningMessage('DevBoost: No valid buttons to add.');
+			} else if (duplicateButtons.length > 0) {
+				vscode.window.showInformationMessage('DevBoost: All duplicate buttons were skipped.');
 			}
 			return 0;
 		}
@@ -285,8 +313,9 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 		if (validButtons.length > 0) {
 			messages.push(`Added ${validButtons.length} button${validButtons.length > 1 ? 's' : ''}`);
 		}
-		if (duplicateButtons.length > 0) {
-			messages.push(`${duplicateButtons.length} similar button${duplicateButtons.length > 1 ? 's' : ''} skipped`);
+		const skippedDuplicates = duplicateButtons.length - duplicateButtons.filter(d => validButtons.includes(d.newButton)).length;
+		if (skippedDuplicates > 0) {
+			messages.push(`${skippedDuplicates} duplicate${skippedDuplicates > 1 ? 's' : ''} skipped`);
 		}
 		if (invalidButtons.length > 0) {
 			messages.push(`${invalidButtons.length} invalid button${invalidButtons.length > 1 ? 's' : ''} skipped`);

@@ -27,13 +27,13 @@ function getSystemInfo(): { platform: string; shell: string} {
 
 /**
  * AI-powered duplicate detection using semantic similarity
- * Returns the name of the existing button if duplicate found, null otherwise
+ * Returns the existing button if duplicate found, null otherwise
  */
 export async function checkDuplicateButton(
 	newButton: smartCmdButton,
 	existingButtons: smartCmdButton[],
 	targetScope: 'workspace' | 'global'
-): Promise<string | null> {
+): Promise<smartCmdButton | null> {
 	if (existingButtons.length === 0) {
 		return null;
 	}
@@ -65,13 +65,13 @@ export async function checkDuplicateButton(
 		
 		if (newCmdNormalized === existingCmdNormalized) {
 			console.log(`Duplicate detected: "${newButton.cmd}" matches "${existing.cmd}" (${existing.scope})`);
-			return existing.name;
+			return existing;
 		}
 	}
 
 	// Use AI for semantic similarity check
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
 		
 		if (models.length === 0) {
 			return null;
@@ -111,7 +111,9 @@ Don't consider buttons as duplicates if they:
 1. Have different commands even if they seem related (e.g., "git commit" vs "git push")
 2. Have specific tasks assigned to it even if a similar command exists
 
-If it's a duplicate/similar, respond with ONLY the NAME of the most similar existing button (e.g., "🔨 Build Project").
+If it's a duplicate/similar, respond with JSON containing the existing button's details:
+{"name": "🔨 Build Project", "cmd": "npm run build", "scope": "workspace"}
+
 If it's unique, respond with only "UNIQUE".`;
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
@@ -131,8 +133,43 @@ If it's unique, respond with only "UNIQUE".`;
 			return null;
 		}
 		
-		console.log(`AI detected duplicate: "${newButton.name}" is similar to "${answer}"`);
-		return answer;
+		// Try to parse JSON response with button details
+		try {
+			// Clean up the response (remove code blocks if present)
+			let cleanedAnswer = answer.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+			
+			// Try to find JSON object in the response
+			const jsonMatch = cleanedAnswer.match(/\{[^}]+\}/);
+			if (jsonMatch) {
+				const aiResponse = JSON.parse(jsonMatch[0]);
+				
+				// Validate that we have the required fields
+				if (aiResponse.name && aiResponse.cmd && aiResponse.scope) {
+					// Find the button that matches ALL three fields
+					const matchingButton = buttonsToCheck.find(b => 
+						b.name === aiResponse.name && 
+						normalizeCmd(b.cmd) === normalizeCmd(aiResponse.cmd) &&
+						b.scope === aiResponse.scope
+					);
+					
+					if (matchingButton) {
+						console.log(`AI detected duplicate: "${newButton.name}" is similar to "${matchingButton.name}" (cmd: "${matchingButton.cmd}", scope: ${matchingButton.scope})`);
+						return matchingButton;
+					} else {
+						console.warn(`AI returned button details but couldn't find exact match: ${JSON.stringify(aiResponse)}`);
+						return null;
+					}
+				}
+			}
+		} catch (parseError) {
+			console.warn('Failed to parse AI response as JSON:', parseError);
+			console.warn('AI response was:', answer);
+		}
+		
+		// If we couldn't parse the response or validate the match, treat as not a duplicate
+		// Better to allow a potential duplicate than to incorrectly match by name alone
+		console.log('Could not validate duplicate with full details, treating as unique');
+		return null;
 
 	} catch (error) {
 		console.error('Error in AI duplicate detection:', error);
@@ -145,7 +182,7 @@ If it's unique, respond with only "UNIQUE".`;
  */
 export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise<boolean> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
 		
 		if (models.length === 0) {
 			console.log('DevBoost: No AI model available for global safety check');
@@ -209,15 +246,22 @@ Respond with ONLY one word:
  * Get AI suggestions for buttons based on activity patterns
  */
 export async function getAISuggestions(
-	topActivities: string[],
+	optimizedLog: { summary: string; recentLogs: string[] },
 	detailedContext?: any
 ): Promise<smartCmdButton[]> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		// Log ALL available Copilot models first
+		const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+		console.log('DevBoost: ALL available Copilot models:', allModels.map(m => ({ family: m.family, name: m.name, maxTokens: m.maxInputTokens })));
+		
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
+		
+		// Log selected model
+		console.log('DevBoost: Selected copilot models:', models.map(m => ({ family: m.family, name: m.name, maxTokens: m.maxInputTokens })));
 		
 		if (models.length === 0) {
 			vscode.window.showWarningMessage('GitHub Copilot models not available. Using fallback suggestions.');
-			return getFallbackSuggestions(topActivities);
+			return getFallbackSuggestions([]);
 		}
 
 		const model = models[0];
@@ -225,114 +269,32 @@ export async function getAISuggestions(
 		
 	// Build enhanced context information for better AI suggestions
 	let contextualInfo = '';
-	let projectStructureInfo = '';
-	let intelligentSuggestions = '';
-	let workflowInsights = '';
 	
 	if (detailedContext) {
 		// Advanced project structure analysis
 		const directories = detailedContext.frequentDirectories || [];
 		const workspaceName = detailedContext.workspaceInfo.names[0] || 'project';
-		
-		// Detect technology patterns
-		const hasBackendFrontend = directories.some((d: string) => d.includes('/backend') || d.includes('/frontend'));
-		const hasReactNext = directories.some((d: string) => d.includes('node_modules') || d.includes('src') || d.includes('pages'));
-		const hasNodeProject = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
-			cmd.includes('npm') || cmd.includes('yarn') || cmd.includes('node') || cmd.includes('📦'));
-		const hasGitUsage = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
-			cmd.includes('git') || cmd.includes('🌿'));
-		const hasBuildCommands = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
-			cmd.includes('build') || cmd.includes('compile') || cmd.includes('🔨'));
-		const hasTestCommands = Object.keys(detailedContext.commandPatterns).some((cmd: string) => 
-			cmd.includes('test') || cmd.includes('spec') || cmd.includes('🧪'));
-		const failedCommands = Object.keys(detailedContext.errorPatterns || {});
-		
-		// Analyze workflow patterns
-		const topCommands = Object.entries(detailedContext.commandPatterns).slice(0, 5);
-		const isDevWorkflow = topCommands.some(([cmd]) => cmd.includes('start') || cmd.includes('dev') || cmd.includes('serve'));
-		const isGitHeavy = topCommands.some(([cmd]) => cmd.includes('git') || cmd.includes('🌿'));
-		const isMultiDirectory = directories.length > 2;
-		
-		// Generate detailed project analysis
-		projectStructureInfo = '\nPROJECT INTELLIGENCE ANALYSIS:';
-		if (hasBackendFrontend) {
-			projectStructureInfo += '\n• 🏗️  Multi-tier architecture detected (backend/frontend separation)';
-		}
-		if (hasNodeProject) {
-			projectStructureInfo += '\n• 📦 Node.js/npm ecosystem detected';
-		}
-		if (hasReactNext) {
-			projectStructureInfo += '\n• ⚛️  Frontend framework usage patterns detected';
-		}
-		if (hasGitUsage) {
-			projectStructureInfo += '\n• 🌿 Active Git version control workflow';
-		}
-		if (hasBuildCommands) {
-			projectStructureInfo += '\n• 🔨 Build/compilation pipeline detected';
-		}
-		if (hasTestCommands) {
-			projectStructureInfo += '\n• 🧪 Testing workflow present';
-		}
-		
-		// Generate workflow insights
-		workflowInsights = '\nWORKFLOW PATTERN INSIGHTS:';
-		if (isDevWorkflow) {
-			workflowInsights += '\n• 🚀 Active development workflow - prioritize dev server commands';
-		}
-		if (isGitHeavy) {
-			workflowInsights += '\n• 🔄 Git-centric workflow - suggest branch/commit helpers';
-		}
-		if (isMultiDirectory) {
-			workflowInsights += '\n• 📂 Multi-directory navigation - commands MUST include directory changes';
-		}
-		if (failedCommands.length > 0) {
-			workflowInsights += '\n• ⚠️  Error patterns detected - prioritize fixing failed commands';
-		}
-		
-		// Generate highly specific intelligent suggestions
-		intelligentSuggestions = `
-🧠 CONTEXT-DRIVEN BUTTON STRATEGY:
-${hasBackendFrontend ? '🎯 PRIORITY: Create directory-specific commands for backend/frontend workflows' : ''}
-${hasNodeProject ? '🎯 PRIORITY: npm/yarn commands with correct directory context (cd dir && npm action)' : ''}
-${failedCommands.length > 0 ? '🎯 CRITICAL: Address these failures - ' + failedCommands.slice(0, 2).join(', ') : ''}
-${hasGitUsage ? '🎯 ENHANCE: Git workflow automation (branch management, smart commits)' : ''}
-${isDevWorkflow ? '🎯 OPTIMIZE: Development server management and hot-reload workflows' : ''}
-
-MANDATORY COMMAND PATTERNS:
-• Always include "cd [directory] &&" before actions that need specific locations
-• Chain related actions (install + start, build + deploy, etc.)
-• Use relative paths that work from any starting directory
-• Include error handling for common failure points`;
+	
 		contextualInfo = `
-🔍 ENHANCED WORKFLOW INTELLIGENCE:
-${detailedContext.summary}
-${projectStructureInfo}
-${workflowInsights}
-
 📊 Workspace Context:
-- Project: ${workspaceName}
+- Workspace: ${workspaceName}
 - Active workspaces: ${detailedContext.workspaceInfo.count}
 - Directory complexity: ${directories.length} frequent locations
 
-⚡ Terminal Intelligence:
-- Primary shell: ${detailedContext.terminalPatterns.mostUsed}
-- Usage patterns: ${Object.entries(detailedContext.terminalPatterns.shells).map(([shell, count]) => `${shell}(${count}x)`).join(', ')}
-
-📍 Critical Directory Mapping (USE THESE FOR NAVIGATION):
+📍 Frequent Directory Mapping (USE THESE FOR NAVIGATION):
 ${detailedContext.frequentDirectories.map((dir: string, i: number) => {
 			const shortPath = dir.split('/').slice(-2).join('/');
 			return `${i + 1}. ${shortPath} → Full: ${dir}`;
 		}).join('\n')}
 
-📈 Command Usage Intelligence:
-${Object.entries(detailedContext.commandPatterns).slice(0, 6).map(([cmd, count]) => 
-			`• ${cmd}: ${count}x${cmd.includes('npm') ? ' (Node.js)' : ''}${cmd.includes('git') ? ' (Git)' : ''}${cmd.includes('cd') ? ' (Navigation)' : ''}`
-		).join('\n')}
+⚡ Terminal Intelligence:
+- Primary shell: ${detailedContext.terminalPatterns.mostUsed}
+- Usage patterns: ${Object.entries(detailedContext.terminalPatterns.shells).map(([shell, count]) => `${shell}(${count}x)`).join(', ')}
 
 ${Object.keys(detailedContext.errorPatterns).length > 0 ? `
 🚨 FAILURE ANALYSIS (CREATE BETTER ALTERNATIVES):
 ${Object.entries(detailedContext.errorPatterns).slice(0, 3).map(([error, count]) => `• ${error} (${count}x failures)`).join('\n')}
-` : ''}${intelligentSuggestions}`;
+` : ''}`;
 	}
 	
 	const prompt = 
@@ -342,29 +304,54 @@ ${Object.entries(detailedContext.errorPatterns).slice(0, 3).map(([error, count])
 - OS: ${platform} | Shell: ${shell}
 ${contextualInfo}
 
-📋 USER ACTIVITY ANALYSIS:
-${topActivities.map((activity, i) => `${i + 1}. ${activity}`).join('\n')}
+📊 STATISTICAL OVERVIEW:
+${optimizedLog.summary}
+
+RECENT ACTIVITY LOG (Last ${optimizedLog.recentLogs.length} Commands in Sequential Order):
+${optimizedLog.recentLogs.join('\n')}
 
 🎯 CRITICAL SUCCESS CRITERIA:
-1. **DIRECTORY-FIRST THINKING**: Every command MUST consider WHERE it should run
-2. **CONTEXT-AWARE CHAINING**: Combine navigation + action in single commands
-3. **FAILURE-PROOF DESIGN**: Address known error patterns with robust alternatives
-4. **WORKFLOW-SPECIFIC**: Tailor to detected patterns (dev/git/build/test)
-5. **MULTI-STEP INTELLIGENCE**: Chain related actions for efficiency
+1. **SEQUENTIAL ANALYSIS**: Study the command sequences above to understand the developer's actual workflow
+2. **TERMINAL-AWARE WORKFLOWS**: Each log entry has Context.terminal.id - group commands by terminal ID to understand parallel workflows
+   • Terminal A running dev server while Terminal B handles git operations = separate workflows
+   • Same terminal ID with repeated sequences = workflow pattern to automate
+3. **WORKFLOW RECOGNITION**: Identify repetitive multi-step patterns by analyzing the sequential logs
+4. **DIRECTORY-AWARE**: Notice which directories commands are executed in (from Context.terminal.cwd)
+5. **FAILURE-PROOF DESIGN**: Address commands that failed (non-zero exit codes)
+6. **CHAIN INTELLIGENCE**: Create buttons that automate entire workflows, not just single commands
 
 🧠 INTELLIGENT COMMAND DESIGN PRINCIPLES:
 
-❌ AVOID (Generic/Dumb):
-- "npm install" (location-blind)
-- "npm start" (will fail in wrong dir)
-- "git status" (too basic)
-- Single-purpose commands that ignore context
+❌ TRY TO AVOID (can be included if frequently used alone):
+- Single commands like "npm install" or "git status"
+- Commands that ignore the sequential workflow context
+- Location-blind commands that will fail in wrong directories
 
-✅ CREATE (Smart/Contextual):
-- "cd backend && npm install && npm run dev" (location + action + goal)
-- "cd frontend && npm ci && npm start" (faster install + start)
-- "git status && git branch -v && git log --oneline -5" (comprehensive git overview)
+✅ CREATE (Smart/Workflow-Based):
+- Commands that chain frequently-used sequences you see in the logs
 - Multi-step workflows that solve complete tasks
+- Directory-aware commands that cd to the right location first
+- Error-resilient commands that handle common failures
+
+EXAMPLES OF SMART BUTTONS FROM SEQUENTIAL ANALYSIS:
+• If you see: "npm install" → "npm run build" → "npm test" repeatedly IN SAME TERMINAL
+  Create: "cd project && npm install && npm run build && npm test"
+  
+• If you see PARALLEL WORKFLOWS (different terminal IDs):
+  Terminal 12345: "cd /frontend && npm run dev" (long-running)
+  Terminal 67890: "git add . && git commit && git push" (repeated)
+  Create separate buttons for each workflow
+  
+• If you see: "git add ." → "git commit -m ..." → "git push" pattern
+  Create: "git add . && git commit -m '{message}' && git push"
+  With inputs: [{"placeholder": "Enter commit message", "variable": "{message}"}]
+  
+• If you see frequent directory changes before commands
+  Include: "cd [detected-dir] && [command]"
+  
+• If command needs user input, use {variableName} placeholders:
+  Command: "docker exec -it {container} bash"
+  With inputs: [{"placeholder": "Container name", "variable": "{container}"}]
 
 🔧 ${platform} COMMAND REQUIREMENTS:
 ${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed' : ''}
@@ -372,23 +359,70 @@ ${platform === 'macOS' || platform === 'Linux' ? '• Use && for chaining, Unix 
 • All commands must work reliably in ${detailedContext?.terminalPatterns?.mostUsed || shell}
 • Include error handling where appropriate (|| echo "Error occurred")
 
+🚨 CRITICAL RULE - EMOJIS:
+• ONLY use emoji/icon in the "name" field at the beginning (e.g., "🚀 Build Project")
+• NEVER use emojis, icons, or special characters in the "cmd" field - it must be plain terminal command text only
+• NEVER use emojis, icons, or special characters in the "ai_description" field
+• Violation of this rule will cause command execution failures
+
 📝 RESPONSE FORMAT (JSON only):
+
+WITHOUT INPUT FIELDS - CORRECT FORMAT:
 [
     {
-        "name": "🚀 [Action] [Context]",
-        "cmd": "cd [specific-dir] && [primary-action] && [secondary-action]",
-        "ai_description": "Contextual explanation of WHY this command is intelligent for this workflow"
+        "name": "🚀 Build and Deploy",
+        "cmd": "cd /path/to/project && npm run build && npm run deploy",
+        "ai_description": "Automates the build and deploy workflow pattern"
+    }
+]
+
+WITH INPUT FIELDS - CORRECT FORMAT:
+[
+    {
+        "name": "📝 Git Commit & Push",
+        "cmd": "git add . && git commit -m '{message}' && git push",
+        "ai_description": "Stages changes, commits with custom message, and pushes to remote",
+        "inputs": [
+            {
+                "placeholder": "Enter commit message",
+                "variable": "{message}"
+            }
+        ]
+    },
+    {
+        "name": "🐳 Docker Execute",
+        "cmd": "docker exec -it {container} {command}",
+        "ai_description": "Execute command inside a Docker container",
+        "inputs": [
+            {
+                "placeholder": "Container name",
+                "variable": "{container}"
+            },
+            {
+                "placeholder": "Command to run",
+                "variable": "{command}"
+            }
+        ]
+    }
+]
+
+WRONG FORMAT (DO NOT DO THIS):
+[
+    {
+        "name": "Build Project",
+        "cmd": "cd project && make msim_main || echo '❌ Build failed'",  ❌ NO EMOJIS IN CMD!
+        "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
     }
 ]
 
 🎯 QUALITY CHECKLIST:
-- Each command includes proper directory navigation
-- Commands solve complete workflows, not just single actions
-- Names clearly indicate the smart action being performed
-- Descriptions explain the intelligent reasoning behind the command
-- All commands are tailored to the detected project structure
+- Each button represents a REAL workflow pattern from the sequential logs
+- Commands chain multiple steps that you observed happening together
+- Buttons save time by automating repetitive sequences
+- All commands include proper directory context from the logs
+- Descriptions reference the actual workflow patterns detected
 
-Generate 3-5 buttons that demonstrate sophisticated understanding of this specific workflow.
+Analyze the sequential logs carefully and generate 3-5 buttons that automate the ACTUAL workflows you observe.
 RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
@@ -411,7 +445,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 		}
 
 		vscode.window.showWarningMessage('Could not parse AI response. Using fallback suggestions.');
-		return getFallbackSuggestions(topActivities);
+		return getFallbackSuggestions([]);
 
 	} catch (err) {
 		if (err instanceof vscode.LanguageModelError) {
@@ -421,7 +455,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 			console.error('Unexpected error getting AI suggestions:', err);
 			vscode.window.showWarningMessage('AI suggestion failed. Using fallback suggestions.');
 		}
-		return getFallbackSuggestions(topActivities);
+		return getFallbackSuggestions([]);
 	}
 }
 
@@ -430,9 +464,10 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
  */
 export async function getCustomButtonSuggestion(
 	description: string,
+	scope: 'workspace' | 'global' = 'workspace'
 ): Promise<smartCmdButton | null> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
 		
 		if (models.length === 0) {
 			vscode.window.showInformationMessage('GitHub Copilot not available. Please enter button details manually.');
@@ -442,25 +477,61 @@ export async function getCustomButtonSuggestion(
 		const model = models[0];
 		const { platform, shell } = getSystemInfo();
 		
+		// Get workspace context if scope is workspace
+		let workspaceContext = '';
+		if (scope === 'workspace') {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+			if (workspaceFolder) {
+				const workspaceName = workspaceFolder.name;
+				const workspacePath = workspaceFolder.uri.fsPath;
+				workspaceContext = `
+WORKSPACE CONTEXT:
+- Workspace Name: ${workspaceName}
+- Workspace Path: ${workspacePath}
+- Button Scope: Workspace-specific (will only be available in this project)
+
+IMPORTANT: Since this button is workspace-specific, you can:
+- Use relative paths if told in description (e.g., ./src, ./scripts, npm run custom-script)
+- Reference project-specific files and directories if provided (e.g., ./package.json, ./config)
+`;
+			}
+		} else {
+			workspaceContext = `
+BUTTON SCOPE: Global (will be available across all projects)
+
+IMPORTANT: Since this button is global, you should:
+- Use generic commands that work anywhere (e.g., git status, npm install)
+- Avoid relative paths or project-specific references
+- Use only standard tooling commands available globally
+- Do NOT assume any specific project structure
+`;
+		}
+		
 		const prompt = `Create a VS Code button based on this description: "${description}"
 
 SYSTEM INFORMATION:
 - Operating System: ${platform}
 - Shell: ${shell}
+${workspaceContext}
 
 IMPORTANT: Generate commands that are compatible with ${platform} and ${shell}.
 ${platform === 'Windows' ? '- Use Windows-compatible commands (e.g., PowerShell or cmd syntax)' : ''}
 ${platform === 'macOS' || platform === 'Linux' ? '- Use Unix/Linux-compatible commands (bash/zsh syntax)' : ''}
+🚨 CRITICAL RULE - EMOJIS:
+• ONLY use emoji/icon in the "name" field at the beginning (e.g., "🚀 Build Project")
+• NEVER use emojis, icons, or special characters in the "cmd" field - it must be plain terminal command text only
+• NEVER use emojis, icons, or special characters in the "ai_description" field
+• The "cmd" field will be executed directly in the terminal - any emoji will cause execution failure
 
 Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
 2. The exact command to execute (terminal command or VS Code command like "workbench.action.files.saveAll") - MUST be compatible with ${platform}
-3. A brief description of what the button does (this will be stored as ai_description)
+3. A brief description of what the button does (this will be stored as ai_description) - NO EMOJIS
 4. If the command needs user input, include input fields with placeholders (use {variableName} format in cmd)
 
 The user provided this description: "${description}" (this will be stored as user_description)
 
-Format your response as JSON:
+CORRECT FORMAT:
 {
     "name": "🔨 Build Project",
     "cmd": "npm run build",
@@ -478,6 +549,13 @@ Or with inputs:
             "variable": "{message}"
         }
     ]
+}
+
+WRONG FORMAT (DO NOT DO THIS):
+{
+    "name": "Build Project",  ❌ Missing emoji in name
+    "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
+    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
 }
 
 Only respond with the JSON object, no additional text.`;
