@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as aiServices from './aiServices';
 import * as activityLogging from '../activityLogging';
-import { smartCmdButton, InputField, SmartCmdButtonsTreeProvider } from './treeProvider';
+import { smartCmdButton, InputField, SmartCmdButtonsTreeProvider, SmartCmdButtonTreeItem } from './treeProvider';
 import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
 
 // Create AI-suggested buttons based on activity log
@@ -89,7 +89,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 		const previewMessage = `AI has analyzed your workflow and suggests ${buttons.length} button${buttons.length > 1 ? 's' : ''}:
 
 ${buttons.map((btn, i) => `${i + 1}. ${btn.name}
-   Cmd: ${btn.cmd}
+   Cmd: ${btn.execDir && btn.execDir.trim() !== '.' && btn.execDir.trim() !== '' ? 'cd ' + btn.execDir + ' && ' : ''}${btn.cmd}
    
    - ${btn.ai_description}`).join('\n\n\n')}
 
@@ -117,7 +117,7 @@ Do you want to create these buttons?`;
 `Review Button:
 
 Name: ${button.name}
-Cmd: ${button.cmd}
+Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? 'cd ' + button.execDir + ' && ' : ''}${button.cmd}
 
 AI description: ${button.ai_description}
 
@@ -132,6 +132,7 @@ What would you like to do?`,
 					const addedCount = await buttonsProvider.addButtons([button], 'workspace');
 					acceptedCount += addedCount;
 				} else if (buttonChoice === 'Edit AI Description') {
+
 					const editedDescription = await vscode.window.showInputBox({
 						prompt: 'Edit the AI-generated description',
 						value: button.ai_description,
@@ -144,15 +145,13 @@ What would you like to do?`,
 						}
 					});
 
-					if (editedDescription) {
-						// Add edited button immediately for real-time duplicate detection
-						const editedButton = {
-							...button,
-							ai_description: editedDescription.trim()
-						};
-						const addedCount = await buttonsProvider.addButtons([editedButton], 'workspace');
-						acceptedCount += addedCount;
+					if (!editedDescription) {
+						continue;
 					}
+					button.ai_description = editedDescription.trim();
+
+					const addedCount = await buttonsProvider.addButtons([button], 'workspace');
+					acceptedCount += addedCount;
 				}
 				// Skip button if user doesn't select Accept or Edit
 			}
@@ -350,7 +349,7 @@ Example: "Button to add changes and commit code using git"`,
 			const confirmationMessage = `AI has generated the following button:
 
 Name: ${button.name}
-Cmd: ${button.cmd}
+Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}
 
 AI Description:
 ${button.ai_description}
@@ -448,6 +447,10 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 		}
 	}
 
+	// Prepend execution directory if specified
+	if (button.execDir && button.execDir.trim().length > 0 && button.execDir.trim() !== '.') {
+		finalCommand = `cd ${button.execDir.trim()} && ${finalCommand}`;
+	}
 	// Check if it's a single-word (eg. VS Code command, no spaces or chaining)
 	if (!finalCommand.includes(' ') && !finalCommand.includes('&&') && !finalCommand.includes('||') && !finalCommand.includes(';')) {
 		console.log('Attempting to execute as VS Code command:', finalCommand);
@@ -530,7 +533,7 @@ export async function openButtonsFile(item: any, globalButtonsPath: string | und
 }
 
 // Helper function to add button to global scope
-export async function addToGlobal(item: any, buttonsProvider: SmartCmdButtonsTreeProvider) {
+export async function addToGlobal(item: SmartCmdButtonTreeItem, buttonsProvider: SmartCmdButtonsTreeProvider) {
 	if (!item) {
 		vscode.window.showWarningMessage('DevBoost: No button selected to add to global.');
 		return;
@@ -543,7 +546,7 @@ export async function addToGlobal(item: any, buttonsProvider: SmartCmdButtonsTre
 	}
 
 	// Use AI to validate if button is suitable for global scope
-	const isGlobalSafe = await vscode.window.withProgress({
+	const safetyCheck = await vscode.window.withProgress({
 		location: vscode.ProgressLocation.Notification,
 		title: "Analyzing button compatibility with global scope...",
 		cancellable: false
@@ -551,7 +554,7 @@ export async function addToGlobal(item: any, buttonsProvider: SmartCmdButtonsTre
 		return await aiServices.checkIfButtonIsGlobalSafe(item.button);
 	});
 
-	if (!isGlobalSafe) {
+	if (!safetyCheck.isSafe) {
 		const warningMessage = `This button appears to be workspace-specific and may not work correctly in other projects.
 
 Button Details:
@@ -561,8 +564,8 @@ Button Details:
 ${item.button.inputs ? `• Inputs: ${item.button.inputs.map((i: any) => i.placeholder).join(', ')}` : ''}
 • Current Scope: Workspace
 
-Why it may be workspace-specific:
-The button appears to contain project paths, workspace settings, or project-specific commands that might not exist in other projects.
+Why it's workspace-specific:
+${safetyCheck.reason || 'The button appears to contain project paths, workspace settings, or project-specific commands that might not exist in other projects.'}
 
 Do you want to add it to global scope anyway?`;
 
@@ -582,10 +585,11 @@ Do you want to add it to global scope anyway?`;
 	// Create a copy of the button for global scope
 	const globalButton: smartCmdButton = {
 		name: item.button.name,
+		execDir: '.', // Reset execDir for global button
 		cmd: item.button.cmd,
 		user_description: item.button.user_description,
 		ai_description: item.button.ai_description,
-		scope: 'global'
+		scope: 'global',
 	};
 
 	// Use addButtons which handles duplicate detection automatically
@@ -616,6 +620,19 @@ async function getManualButtonInput(description: string): Promise<smartCmdButton
 	if (!name) {
 		vscode.window.showInformationMessage('Button creation cancelled.');
 		return null;
+	}
+
+	const execDir = await vscode.window.showInputBox({
+		prompt: 'Enter execution directory (optional)',
+		value: vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+			? vscode.workspace.workspaceFolders[0].uri.fsPath
+			: '.',
+		placeHolder: 'e.g., ./src, /usr/local/bin, etc.'
+	});
+
+	let finalExecDir = '.';
+	if (execDir && execDir.trim().length > 0) {
+		finalExecDir = execDir.trim();
 	}
 
 	const cmd = await vscode.window.showInputBox({
@@ -654,13 +671,23 @@ async function getManualButtonInput(description: string): Promise<smartCmdButton
 					variable: variable
 				});
 			}
+			else {
+				vscode.window.showInformationMessage('Button creation cancelled.');
+				return null;
+			}
 		}
 	}
+	const descriptionInput = await vscode.window.showInputBox({
+		prompt: 'Edit button description (optional)',
+		value: description,
+		placeHolder: 'Brief description of what this button does'
+	});
 
 	return {
 		name: name.trim(),
 		cmd: cmd.trim(),
-		user_description: description?.trim(), // Store as user_description
-		inputs: inputs.length > 0 ? inputs : undefined
+		user_description: descriptionInput?.trim(), // Store as user_description
+		inputs: inputs.length > 0 ? inputs : undefined,
+		execDir: finalExecDir
 	};
 }

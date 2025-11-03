@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as handlers from './handlers';
-import { SmartCmdButtonsTreeProvider, smartCmdButton } from './treeProvider';
+import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton } from './treeProvider';
 
 export async function activateSmartCmd(
 	context: vscode.ExtensionContext,
@@ -94,7 +94,7 @@ export async function activateSmartCmd(
 		await buttonsProvider.editButton(item);
 	});
 
-	const addToGlobalDisposable = vscode.commands.registerCommand('devboost.addToGlobal', async (item: any) => {
+	const addToGlobalDisposable = vscode.commands.registerCommand('devboost.addToGlobal', async (item: SmartCmdButtonTreeItem) => {
 		await handlers.addToGlobal(item, buttonsProvider);
 	});
 

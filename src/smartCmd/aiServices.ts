@@ -10,7 +10,7 @@ const ENABLE_PROMPT_LOGGING = true;
 /**
  * Log AI prompts to file for development/debugging purposes
  */
-async function logPromptToFile(functionName: string, prompt: string, metadata?: any): Promise<void> {
+async function logPromptToFile(functionName: string, prompt: string, response: string, metadata?: any): Promise<void> {
 	if (!ENABLE_PROMPT_LOGGING) {
 		return;
 	}
@@ -33,10 +33,15 @@ ${'='.repeat(80)}
 TIMESTAMP: ${timestamp}
 FUNCTION: ${functionName}
 METADATA: ${metadata ? JSON.stringify(metadata, null, 2) : 'N/A'}
-${'='.repeat(80)}
 
+${'='.repeat(80)}
+PROMPT:
 ${prompt}
 
+${'='.repeat(80)}
+RESPONSE:
+${response}
+${'='.repeat(80)}
 ${'='.repeat(80)}
 
 `;
@@ -127,7 +132,7 @@ export async function checkDuplicateButton(
 
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.ai_description || b.user_description || 'N/A';
-			return `${i + 1}. Name: "${b.name}", Command: "${b.cmd}", Description: "${desc}", Scope: ${b.scope}`;
+			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", Scope: ${b.scope}`;
 		}).join('\n');
 
 		const scopeContext = targetScope === 'global'
@@ -140,6 +145,7 @@ export async function checkDuplicateButton(
 		
 New Button (Target Scope: ${targetScope}):
 - Name: "${newButton.name}"
+- Exec Dir: "${newButton.execDir && newButton.execDir.trim() !== '' ? newButton.execDir : '.'}"
 - Command: "${newButton.cmd}"
 - Description: "${newButtonDesc}"
 
@@ -152,22 +158,17 @@ Consider buttons as duplicates if they:
 1. Execute the same command (even with different variable names)
 2. Perform the same action (e.g., "git commit" vs "commit changes")
 3. Have the same functionality with minor syntax differences
+4. Have almost the same name text
 
 Don't consider buttons as duplicates if they:
 1. Have different commands even if they seem related (e.g., "git commit" vs "git push")
 2. Have specific tasks assigned to it even if a similar command exists
+3. Execute commands in different directories that change their context significantly
 
 If it's a duplicate/similar, respond with JSON containing the existing button's details:
-{"name": "🔨 Build Project", "cmd": "npm run build", "scope": "workspace"}
+{"name": "🔨 Build Project", "execDir": "./backend", "cmd": "npm run build", "scope": "workspace"}
 
 If it's unique, respond with only "UNIQUE".`;
-
-		// Log prompt for development
-		await logPromptToFile('checkDuplicateButton', prompt, {
-			newButton: { name: newButton.name, cmd: newButton.cmd },
-			targetScope,
-			existingButtonsCount: buttonsToCheck.length
-		});
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
@@ -178,6 +179,13 @@ If it's unique, respond with only "UNIQUE".`;
 		for await (const part of response.text) {
 			fullResponse += part;
 		}
+
+		// Log prompt for development
+		await logPromptToFile('checkDuplicateButton', prompt, fullResponse, {
+			newButton: { name: newButton.name, execDir: newButton.execDir, cmd: newButton.cmd },
+			targetScope,
+			existingButtonsCount: buttonsToCheck.length
+		});
 
 		console.log('AI duplicate detection response:', fullResponse);
 		const answer = fullResponse.trim();
@@ -202,11 +210,12 @@ If it's unique, respond with only "UNIQUE".`;
 					const matchingButton = buttonsToCheck.find(b => 
 						b.name === aiResponse.name && 
 						normalizeCmd(b.cmd) === normalizeCmd(aiResponse.cmd) &&
-						b.scope === aiResponse.scope
+						b.scope === aiResponse.scope &&
+						b.execDir === aiResponse.execDir
 					);
 					
 					if (matchingButton) {
-						console.log(`AI detected duplicate: "${newButton.name}" is similar to "${matchingButton.name}" (cmd: "${matchingButton.cmd}", scope: ${matchingButton.scope})`);
+						console.log(`AI detected duplicate: "${newButton.name}" is similar to "${matchingButton.name}" (cmd: "${matchingButton.cmd}", scope: ${matchingButton.scope}, execDir: ${matchingButton.execDir})`);
 						return matchingButton;
 					} else {
 						console.warn(`AI returned button details but couldn't find exact match: ${JSON.stringify(aiResponse)}`);
@@ -232,14 +241,15 @@ If it's unique, respond with only "UNIQUE".`;
 
 /**
  * Check if a button is safe to add to global scope using AI
+ * Returns an object with isSafe boolean and reason string
  */
-export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise<boolean> {
+export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise<{ isSafe: boolean; reason?: string }> {
 	try {
 		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
 		
 		if (models.length === 0) {
 			console.log('DevBoost: No AI model available for global safety check');
-			return true;
+			return { isSafe: true };
 		}
 
 		const model = models[0];
@@ -253,13 +263,13 @@ Button Details:
 - AI Description: "${button.ai_description || 'N/A'}"
 
 A button is WORKSPACE-SPECIFIC if it:
-1. Uses RELATIVE paths that reference project structure (e.g., ./src/build.sh, ../config/setup.js, npm run custom-script)
-2. References project-specific directories/files (e.g., ./node_modules, ./package.json, ./src, ./config)
-3. Uses workspace-specific configuration files in project root (e.g., .env, config.json, settings.json)
-4. Runs project-specific npm/yarn scripts that may not exist in other projects (e.g., npm run deploy-prod)
-5. References workspace settings or workspace-only VS Code commands
-6. Contains project-specific variable names, database names, or project identifiers
-7. Uses paths like "node scripts/build.js" which assumes project structure
+1. Uses RELATIVE paths that is not generic directory like current directory and reference project structure (e.g., ./src/build.sh, ../config/setup.js, npm run custom-script)
+2. Uses workspace-specific configuration files in project root (e.g., .env, config.json, settings.json)
+3. Runs project-specific npm/yarn scripts that may not exist in other projects (e.g., npm run deploy-prod)
+4. References workspace settings or workspace-only VS Code commands
+5. Contains workspace-specific variable names, database names, or project identifiers
+6. Uses paths like "node scripts/build.js" which assumes workspace structure
+7. Name or description indicates workspace-specific context
 
 A button is GLOBAL-SAFE if it:
 1. Uses generic commands that work anywhere (e.g., git status, npm install, npm test, ls, cd)
@@ -269,17 +279,16 @@ A button is GLOBAL-SAFE if it:
 5. General utility commands that don't depend on project structure
 6. System-level scripts or applications with absolute paths that exist across projects
 
-IMPORTANT: Absolute paths to system tools are SAFE (they're global). Relative paths to project files are UNSAFE (they're workspace-specific).
+IMPORTANT: Absolute paths to system tools are SAFE (they're global). Relative paths to workspace files are UNSAFE (they're workspace-specific).
 
-Respond with ONLY one word:
-- "SAFE" if the button can be used globally across all projects
-- "UNSAFE" if the button is workspace-specific and shouldn't be global`;
+Response format:
+- If SAFE: Respond with only "SAFE"
+- If UNSAFE: Respond with JSON: {"status": "UNSAFE", "reason": "Brief explanation why it's workspace-specific"}
 
-		// Log prompt for development
-		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, {
-			button: { name: button.name, cmd: button.cmd },
-			currentScope: button.scope
-		});
+Examples:
+SAFE
+{"status": "UNSAFE", "reason": "Uses relative path ./src which assumes specific project structure"}
+{"status": "UNSAFE", "reason": "Runs npm script 'deploy-prod' which may not exist in other projects"}`;
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
@@ -290,14 +299,39 @@ Respond with ONLY one word:
 			fullResponse += part;
 		}
 
+		// Log prompt for development
+		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
+			button: { name: button.name, cmd: button.cmd },
+			currentScope: button.scope
+		});
+
 		console.log('DevBoost: Global safety check response:', fullResponse);
-		const answer = fullResponse.trim().toUpperCase();
+		const answer = fullResponse.trim();
 		
-		return answer.includes('SAFE') && !answer.includes('UNSAFE');
+		// Check if response is simply "SAFE"
+		if (answer.toUpperCase() === 'SAFE' || (answer.toUpperCase().includes('SAFE') && !answer.toUpperCase().includes('UNSAFE'))) {
+			return { isSafe: true };
+		}
+		
+		// Try to parse JSON response with reason
+		try {
+			const jsonMatch = answer.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				const parsed = JSON.parse(jsonMatch[0]);
+				if (parsed.status === 'UNSAFE' && parsed.reason) {
+					return { isSafe: false, reason: parsed.reason };
+				}
+			}
+		} catch (parseError) {
+			console.warn('Failed to parse AI safety check response as JSON:', parseError);
+		}
+		
+		// Default to unsafe if we couldn't determine
+		return { isSafe: false, reason: 'Could not determine safety. Button may contain workspace-specific elements.' };
 
 	} catch (error) {
 		console.error('Error in global safety check:', error);
-		return true;
+		return { isSafe: true };
 	}
 }
 
@@ -350,7 +384,7 @@ ${optimizedLog.recentLogs.join('\n')}
 
 EXAMPLES OF SMART BUTTONS FROM SEQUENTIAL ANALYSIS:
 • If you see: "npm install" → "npm run build" → "npm test" repeatedly IN SAME TERMINAL
-  Create: "cd project && npm install && npm run build && npm test"
+  Create: "npm install && npm run build && npm test"
   
 • If you see PARALLEL WORKFLOWS (different terminal IDs):
   Terminal 12345: "cd /frontend && npm run dev" (long-running)
@@ -362,8 +396,10 @@ EXAMPLES OF SMART BUTTONS FROM SEQUENTIAL ANALYSIS:
   With inputs: [{"placeholder": "Enter commit message", "variable": "{message}"}]
   
 • If you see frequent directory changes before commands
-  Include: "cd [detected-dir] && [command]"
-  
+  Create: 
+  	execDir: "[detected-dir]",
+  	cmd: "[command]"
+
 • If command needs user input, use {variableName} placeholders:
   Command: "docker exec -it {container} bash"
   With inputs: [{"placeholder": "Container name", "variable": "{container}"}]
@@ -384,9 +420,16 @@ ${platform === 'macOS' || platform === 'Linux' ? '• Use && for chaining, Unix 
 WITHOUT INPUT FIELDS - CORRECT FORMAT:
 [
     {
-        "name": "🚀 Build and Deploy",
-        "cmd": "cd /path/to/project && npm run build && npm run deploy",
+		"name": "🚀 Build and Deploy",
+		"execDir": "/path/to/start",
+        "cmd": "npm run build && npm run deploy && cd /path/to/other && ./deploy.sh",
         "ai_description": "Automates the build and deploy workflow pattern"
+    },
+	{
+        "name": "🚀 List all files in current directory",
+        "execDir": ".",
+        "cmd": "ls -la",
+        "ai_description": "Lists all files in the current directory"
     }
 ]
 
@@ -394,6 +437,7 @@ WITH INPUT FIELDS - CORRECT FORMAT:
 [
     {
         "name": "📝 Git Commit & Push",
+        "execDir": "/path/to/workspace",
         "cmd": "git add . && git commit -m '{message}' && git push",
         "ai_description": "Stages changes, commits with custom message, and pushes to remote",
         "inputs": [
@@ -405,6 +449,7 @@ WITH INPUT FIELDS - CORRECT FORMAT:
     },
     {
         "name": "🐳 Docker Execute",
+		"execDir": "/path/to/context",
         "cmd": "docker exec -it {container} {command}",
         "ai_description": "Execute command inside a Docker container",
         "inputs": [
@@ -423,7 +468,8 @@ WITH INPUT FIELDS - CORRECT FORMAT:
 WRONG FORMAT (DO NOT DO THIS):
 [
     {
-        "name": "Build Project",
+        "name": "Build Project",	  ❌ Missing emoji in name
+		"execDir": "cd /path/to/project",  ❌ ExecDir should be just the path, no commands
         "cmd": "cd project && make msim_main || echo '❌ Build failed'",  ❌ NO EMOJIS IN CMD!
         "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
     }
@@ -433,11 +479,7 @@ Analyze the sequential logs carefully and generate 3-5 buttons that automate the
 RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 
 		// Log prompt for development
-		await logPromptToFile('getAISuggestions', prompt, {
-			platform,
-			shell,
-			recentLogsCount: optimizedLog.recentLogs.length,
-		});
+		
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('AI button suggestions prompt:', prompt);
@@ -448,6 +490,12 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 		for await (const part of response.text) {
 			fullResponse += part;
 		}
+
+		await logPromptToFile('getAISuggestions', prompt, fullResponse, {
+			platform,
+			shell,
+			recentLogsCount: optimizedLog.recentLogs.length,
+		});
 
 		console.log('AI response for button suggestions:', fullResponse);
 
@@ -493,6 +541,7 @@ export async function getCustomButtonSuggestion(
 		
 		// Get workspace context if scope is workspace
 		let workspaceContext = '';
+		let workspaceSpecificExamples = '';
 		if (scope === 'workspace') {
 			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 			if (workspaceFolder) {
@@ -506,20 +555,98 @@ WORKSPACE CONTEXT:
 
 IMPORTANT: Since this button is workspace-specific, you can:
 - Use relative paths if told in description (e.g., ./src, ./scripts, npm run custom-script)
+- Use absolute path of workspace (e.g., ${workspacePath}/scripts/deploy.sh)
+- Use absolute paths of system-wide tools (e.g., /usr/local/bin/tool.sh, C:\\Tools\\build.exe)
 - Reference project-specific files and directories if provided (e.g., ./package.json, ./config)
 `;
 			}
+
+			workspaceSpecificExamples = `CORRECT FORMAT:
+using no inputs with absolute execDir:
+{
+    "name": "🔨 Build Project",
+	"execDir": "/path/to/project",
+    "cmd": "npm run build",
+    "ai_description": "Builds the project using npm"
+}
+
+no input with relative/currentDir execDir:
+{
+	"name": "🚀 List all files in current directory",
+	"execDir": ".",
+	"cmd": "ls -la",
+	"ai_description": "Lists all files in the current directory"
+}
+
+Or with inputs:
+{
+    "name": "📝 Git Commit",
+	"execDir": "/path/to/repo",
+    "cmd": "git add . && git commit -m '{message}'",
+    "ai_description": "Stage all changes and commit with a custom message",
+    "inputs": [
+        {
+            "placeholder": "Enter commit message",
+            "variable": "{message}"
+        }
+    ]
+}
+
+WRONG FORMAT (DO NOT DO THIS):
+{
+    "name": "Build Project",  ❌ Missing emoji in name
+	"execDir": "cd /path/to/project",  ❌ ExecDir should be just the path, no commands
+    "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
+    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
+}`;
 		} else {
 			workspaceContext = `
 BUTTON SCOPE: Global (will be available across all projects)
 
 IMPORTANT: Since this button is global, you should:
 - Use generic commands that work anywhere (e.g., git status, npm install)
-- Avoid relative paths or project-specific references
+- Use VS Code built-in commands (e.g., workbench.action.files.save)
 - Use only standard tooling commands available globally
+- Use absolute paths to system-wide tools if needed (e.g., /usr/local/bin/tool.sh, C:\\Tools\\build.exe)
 - Do NOT assume any specific project structure
 `;
+
+			workspaceSpecificExamples = `CORRECT FORMAT:
+using no inputs with generic execDir:
+{
+    "name": "🔨 Build Project",
+    "cmd": "npm run build",
+    "ai_description": "Builds the project using npm"
+}
+
+no input with relative/currentDir execDir:
+{
+	"name": "🚀 List all files in current directory",
+	"cmd": "ls -la",
+	"ai_description": "Lists all files in the current directory"
+}
+
+Or with inputs:
+{
+    "name": "📝 Git Commit",
+    "cmd": "git add . && git commit -m '{message}'",
+    "ai_description": "Stage all changes and commit with a custom message",
+    "inputs": [
+        {
+            "placeholder": "Enter commit message",
+            "variable": "{message}"
+        }
+    ]
+}
+
+WRONG FORMAT (DO NOT DO THIS):
+{
+    "name": "Build Project",  ❌ Missing emoji in name
+    "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
+    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
+}`;
 		}
+
 		
 		const prompt = `Create a VS Code button based on this description: "${description}"
 
@@ -545,43 +672,10 @@ Provide:
 
 The user provided this description: "${description}" (this will be stored as user_description)
 
-CORRECT FORMAT:
-{
-    "name": "🔨 Build Project",
-    "cmd": "npm run build",
-    "ai_description": "Builds the project using npm"
-}
-
-Or with inputs:
-{
-    "name": "📝 Git Commit",
-    "cmd": "git add . && git commit -m '{message}'",
-    "ai_description": "Stage all changes and commit with a custom message",
-    "inputs": [
-        {
-            "placeholder": "Enter commit message",
-            "variable": "{message}"
-        }
-    ]
-}
-
-WRONG FORMAT (DO NOT DO THIS):
-{
-    "name": "Build Project",  ❌ Missing emoji in name
-    "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
-    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
-}
+${workspaceSpecificExamples}
 
 Only respond with the JSON object, no additional text.`;
 
-		// Log prompt for development
-		await logPromptToFile('getCustomButtonSuggestion', prompt, {
-			description,
-			scope,
-			platform,
-			shell,
-			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name
-		});
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('Custom button prompt:', prompt);
@@ -592,6 +686,15 @@ Only respond with the JSON object, no additional text.`;
 		for await (const part of response.text) {
 			fullResponse += part;
 		}
+
+		// Log prompt for development
+		await logPromptToFile('getCustomButtonSuggestion', prompt, fullResponse, {
+			description,
+			scope,
+			platform,
+			shell,
+			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name
+		});
 
 		console.log('AI response for custom button:', fullResponse);
 
@@ -607,6 +710,7 @@ Only respond with the JSON object, no additional text.`;
 				
 				if (button.name && button.cmd && button.ai_description) {
 					button.user_description = description;
+					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
 					console.log('Successfully parsed button:', button);
 					return button;
 				}
