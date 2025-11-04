@@ -171,15 +171,55 @@ npm run watch
 src/
 ├── extension.ts              # Main extension entry point
 ├── activityLogging.ts        # Activity tracking and log management
+├── customDialog.ts           # Custom dialog utilities
+├── utilities/                # Shared utility modules (NEW!)
+│   ├── index.ts             # Central export point
+│   ├── aiLogger.ts          # Centralized AI prompt logging
+│   ├── aiModelUtils.ts      # Common AI model operations
+│   ├── clipboardUtils.ts    # Enhanced clipboard operations
+│   ├── workspaceUtils.ts    # Workspace and file utilities
+│   └── webviewUtils.ts      # Common webview patterns
 ├── smartCmd/                 # SmartCmd automation system
 │   ├── activateExt.ts       # SmartCmd activation and setup
 │   ├── aiServices.ts        # AI integration for button generation
 │   ├── handlers.ts          # Button creation and execution handlers
+│   ├── scriptManager.ts     # Script file operations
 │   └── treeProvider.ts      # Sidebar tree view provider
 └── promptEnhancer/          # Prompt enhancement system
     ├── promptEnhancer.ts    # Main prompt enhancer module
     ├── aiServices.ts        # AI services for prompt enhancement
-    └── handlers.ts          # Prompt enhancement handlers
+    ├── handlers.ts          # Prompt enhancement handlers
+    └── treeProvider.ts      # Tree view for prompt enhancer
+```
+
+### 🧰 Utilities Architecture
+
+DevBoost v0.2.0 introduces a comprehensive utilities system that eliminates code duplication and improves maintainability:
+
+**Core Benefits:**
+- ✅ **Reduced Duplication**: Eliminated ~100+ lines of duplicated code
+- ✅ **Improved Maintainability**: Single source of truth for common operations
+- ✅ **Enhanced UX**: Better user feedback and error handling
+- ✅ **Future Extensibility**: Easy to add new utility functions
+
+**Utility Modules:**
+
+- **`aiLogger.ts`**: Centralized logging for AI prompts with configurable file names and metadata
+- **`aiModelUtils.ts`**: Common patterns for GitHub Copilot model selection and request handling
+- **`clipboardUtils.ts`**: Enhanced clipboard operations with previews and better user feedback
+- **`workspaceUtils.ts`**: Safe workspace operations, file handling, and cross-platform utilities
+- **`webviewUtils.ts`**: Standardized webview creation, messaging, and interaction patterns
+
+**Example Usage:**
+```typescript
+import { getFirstCopilotModel, sendAIRequest, copyWithPreview } from '../utilities';
+
+// Simplified AI operations
+const model = await getFirstCopilotModel('gpt-4o');
+const response = await sendAIRequest(model, messages);
+
+// Enhanced clipboard with preview
+await copyWithPreview(response, 100, 'AI response copied!');
 ```text
 
 ## 🔧 Configuration

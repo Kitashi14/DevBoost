@@ -4,78 +4,12 @@ import { smartCmdButton } from './treeProvider';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { exec } from 'child_process';
+import { logPromptToFile } from '../utilities/aiLogger';
+import { getFirstCopilotModel, sendAIRequest, createUserMessage } from '../utilities/aiModelUtils';
+import { getPlatformInfo } from '../utilities/workspaceUtils';
 
-// Development mode flag - set to false in production
-const ENABLE_PROMPT_LOGGING = true;
-
-/**
- * Log AI prompts to file for development/debugging purposes
- */
-async function logPromptToFile(functionName: string, prompt: string, response: string, metadata?: any): Promise<void> {
-	if (!ENABLE_PROMPT_LOGGING) {
-		return;
-	}
-
-	try {
-		// Get workspace folder for log file
-		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-		if (!workspaceFolder) {
-			return;
-		}
-
-		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'ai_prompts.log');
-		
-		// Ensure directory exists
-		await fs.mkdir(path.dirname(logFilePath), { recursive: true });
-
-		const timestamp = new Date().toISOString();
-		const logEntry = `
-${'='.repeat(80)}
-TIMESTAMP: ${timestamp}
-FUNCTION: ${functionName}
-METADATA: ${metadata ? JSON.stringify(metadata, null, 2) : 'N/A'}
-
-${'='.repeat(80)}
-PROMPT:
-${prompt}
-
-${'='.repeat(80)}
-RESPONSE:
-${response}
-${'='.repeat(80)}
-${'='.repeat(80)}
-
-`;
-
-		// Append to log file
-		await fs.appendFile(logFilePath, logEntry, 'utf-8');
-		console.log(`DevBoost: Logged prompt from ${functionName} to ${logFilePath}`);
-	} catch (error) {
-		console.error('DevBoost: Error logging prompt to file:', error);
-	}
-}
-
-// Get system information for AI context
-function getSystemInfo(): { platform: string; shell: string} {
-	// Determine OS
-	let platform = 'Unknown';
-	if (process.platform === 'win32') {
-		platform = 'Windows';
-	} else if (process.platform === 'darwin') {
-		platform = 'macOS';
-	} else if (process.platform === 'linux') {
-		platform = 'Linux';
-	}
-
-	// Get shell information
-	const shell = process.env.SHELL || process.env.COMSPEC || 'Unknown shell';
-	const shellName = path.basename(shell).replace(/\.(exe|com|bat)$/i, '');
-
-	return {
-		platform,
-		shell: shellName
-	};
-}
+// Get system information for AI context (using utility function)
+const getSystemInfo = getPlatformInfo;
 
 /**
  * AI-powered duplicate detection using semantic similarity
@@ -123,13 +57,11 @@ export async function checkDuplicateButton(
 
 	// Use AI for semantic similarity check
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
+		const model = await getFirstCopilotModel('claude-sonnet-4.5');
 		
-		if (models.length === 0) {
+		if (!model) {
 			return null;
 		}
-
-		const model = models[0];
 
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.ai_description || b.user_description || 'N/A';
@@ -171,22 +103,15 @@ If it's a duplicate/similar, respond with JSON containing the existing button's 
 
 If it's unique, respond with only "UNIQUE".`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-        console.log('AI duplicate detection prompt:', prompt);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const messages = [createUserMessage(prompt)];
+		const fullResponse = await sendAIRequest(model, messages);
 
 		// Log prompt for development
 		await logPromptToFile('checkDuplicateButton', prompt, fullResponse, {
 			newButton: { name: newButton.name, execDir: newButton.execDir, cmd: newButton.cmd },
 			targetScope,
 			existingButtonsCount: buttonsToCheck.length
-		});
+		}, 'ai_prompts_smartcmd.log');
 
 		console.log('AI duplicate detection response:', fullResponse);
 		const answer = fullResponse.trim();

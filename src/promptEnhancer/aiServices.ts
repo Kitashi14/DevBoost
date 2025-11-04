@@ -2,56 +2,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-
-// Enable prompt logging for development/debugging
-const ENABLE_PROMPT_LOGGING = true;
-
-/**
- * Log AI prompts to file for development/debugging purposes
- */
-async function logPromptToFile(functionName: string, prompt: string, response: string, metadata?: any): Promise<void> {
-	if (!ENABLE_PROMPT_LOGGING) {
-		return;
-	}
-
-	try {
-		// Get workspace folder for log file
-		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-		if (!workspaceFolder) {
-			return;
-		}
-
-		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'ai_prompts_enhancer.log');
-		
-		// Ensure directory exists
-		await fs.mkdir(path.dirname(logFilePath), { recursive: true });
-
-		const timestamp = new Date().toISOString();
-		const logEntry = `
-${'='.repeat(80)}
-TIMESTAMP: ${timestamp}
-FUNCTION: ${functionName}
-METADATA: ${metadata ? JSON.stringify(metadata, null, 2) : 'N/A'}
-
-${'='.repeat(80)}
-PROMPT:
-${prompt}
-
-${'='.repeat(80)}
-RESPONSE:
-${response}
-${'='.repeat(80)}
-${'='.repeat(80)}
-
-`;
-
-		// Append to log file
-		await fs.appendFile(logFilePath, logEntry, 'utf-8');
-		console.log(`DevBoost: Logged prompt enhancer from ${functionName} to ${logFilePath}`);
-	} catch (error) {
-		console.error('DevBoost: Error logging prompt enhancer to file:', error);
-	}
-}
+import { logPromptToFile } from '../utilities/aiLogger';
+import { getFirstCopilotModel, sendAIRequest, createUserMessage } from '../utilities/aiModelUtils';
 
 export interface EnhancementSuggestion {
 	type: 'clarity' | 'specificity' | 'context' | 'structure' | 'examples';
@@ -65,14 +17,12 @@ export interface EnhancementSuggestion {
  */
 export async function getPromptEnhancementSuggestions(prompt: string): Promise<EnhancementSuggestion[]> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const model = await getFirstCopilotModel('gpt-4o');
 		
-		if (models.length === 0) {
+		if (!model) {
 			vscode.window.showInformationMessage('GitHub Copilot not available for prompt enhancement.');
 			return [];
 		}
-
-		const model = models[0];
 		
 		const enhancementPrompt = `Analyze this prompt and suggest specific improvements:
 
@@ -102,13 +52,8 @@ RESPOND WITH JSON ARRAY ONLY:
   }
 ]`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(enhancementPrompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const messages = [createUserMessage(enhancementPrompt)];
+		const fullResponse = await sendAIRequest(model, messages);
 
 		try {
 			// Clean up the response to extract JSON
@@ -126,7 +71,7 @@ RESPOND WITH JSON ARRAY ONLY:
 					originalPrompt: prompt,
 					suggestionsCount: filteredSuggestions.length,
 					rawResponseLength: fullResponse.length
-				});
+				}, 'ai_prompts_enhancer.log');
 				
 				return filteredSuggestions;
 			}
