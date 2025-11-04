@@ -77,6 +77,11 @@
         "command": "devboost.addToGlobal",
         "title": "Add to Global Buttons",
         "icon": "$(globe)"
+      },
+      {
+        "command": "devboost.openScriptFile",
+        "title": "Open Script File",
+        "icon": "$(file-code)"
       }
     ],
     "menus": {
@@ -112,14 +117,19 @@
           "group": "1_modify@1"
         },
         {
-          "command": "devboost.addToGlobal",
-          "when": "view == devboost.buttonsView && viewItem == workspaceButton",
+          "command": "devboost.openScriptFile",
+          "when": "view == devboost.buttonsView && viewItem =~ /ScriptButton$/",
           "group": "1_modify@2"
+        },
+        {
+          "command": "devboost.addToGlobal",
+          "when": "view == devboost.buttonsView && viewItem == workspaceButton || viewItem == workspaceScriptButton",
+          "group": "1_modify@3"
         },
         {
           "command": "devboost.deleteButton",
           "when": "view == devboost.buttonsView && viewItem =~ /Button$/",
-          "group": "1_modify@3"
+          "group": "1_modify@4"
         }
       ]
     }

@@ -4,7 +4,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as aiServices from './aiServices';
 import * as activityLogging from '../activityLogging';
-import { smartCmdButton, InputField, SmartCmdButtonsTreeProvider, SmartCmdButtonTreeItem } from './treeProvider';
+import * as scriptManager from './scriptManager';
+import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton, InputField } from './treeProvider';
 import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
 
 // Create AI-suggested buttons based on activity log
@@ -88,10 +89,24 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 		// Show confirmation dialog with preview of AI-suggested buttons
 		const previewMessage = `AI has analyzed your workflow and suggests ${buttons.length} button${buttons.length > 1 ? 's' : ''}:
 
-${buttons.map((btn, i) => `${i + 1}. ${btn.name}
-   Cmd: ${btn.execDir && btn.execDir.trim() !== '.' && btn.execDir.trim() !== '' ? 'cd ' + btn.execDir + ' && ' : ''}${btn.cmd}
+${buttons.map((btn, i) => {
+	let cmdDisplay: string;
+	if (btn.scriptContent) {
+		// Script button - show script content preview
+		const scriptPreview = btn.scriptContent.length > 100 
+			? btn.scriptContent.substring(0, 100) + '...' 
+			: btn.scriptContent;
+		cmdDisplay = `Script:\n${scriptPreview.split('\\n').join('\n   ')}`;
+	} else {
+		// Regular command button
+		cmdDisplay = `Cmd: ${btn.execDir && btn.execDir.trim() !== '.' && btn.execDir.trim() !== '' ? 'cd ' + btn.execDir + ' && ' : ''}${btn.cmd}`;
+	}
+	
+	return `${i + 1}. ${btn.name}
+   ${cmdDisplay}
    
-   - ${btn.ai_description}`).join('\n\n\n')}
+   - ${btn.ai_description}`;
+}).join('\n\n\n')}
 
 Do you want to create these buttons?`;
 
@@ -113,11 +128,21 @@ Do you want to create these buttons?`;
 			let acceptedCount = 0;
 			
 			for (const button of buttons) {
+				let cmdDisplay: string;
+				if (button.scriptContent) {
+					// Script button - show script content
+					const scriptPreview = button.scriptContent.split('\\n').join('\n');
+					cmdDisplay = `Script:\n${scriptPreview}`;
+				} else {
+					// Regular command button
+					cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? 'cd ' + button.execDir + ' && ' : ''}${button.cmd}`;
+				}
+				
 				const buttonChoice = await vscode.window.showInformationMessage(
 `Review Button:
 
 Name: ${button.name}
-Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? 'cd ' + button.execDir + ' && ' : ''}${button.cmd}
+${cmdDisplay}
 
 AI description: ${button.ai_description}
 
@@ -346,10 +371,20 @@ Example: "Button to add changes and commit code using git"`,
 			}
 
 			// Show confirmation dialog with AI-generated details
+			let cmdDisplay: string;
+			if (button.scriptContent) {
+				// Script button - show script content
+				const scriptPreview = button.scriptContent.split('\\n').join('\n');
+				cmdDisplay = `Script:\n${scriptPreview}`;
+			} else {
+				// Regular command button
+				cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}`;
+			}
+			
 			const confirmationMessage = `AI has generated the following button:
 
 Name: ${button.name}
-Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}
+${cmdDisplay}
 
 AI Description:
 ${button.ai_description}
@@ -416,12 +451,30 @@ Do you want to create this button?`;
 
 // Execute button command with input field support and correct working directory context
 export async function executeButtonCommand(button: smartCmdButton, activityLogPath?: string | undefined) {
-	if (!button || !button.cmd || button.cmd.trim().length === 0) {
-		vscode.window.showWarningMessage('No command specified. Please provide a valid command to execute.');
+	if (!button) {
+		vscode.window.showWarningMessage('No button provided to execute.');
 		return;
 	}
 
-	let finalCommand = button.cmd.trim();
+	// Determine the command to execute
+	let finalCommand: string;
+	
+	if (button.scriptFile) {
+		// Button uses a script file - scriptFile contains the full path or we need to construct it
+		// The cmd field should already contain the command to run the script
+		finalCommand = button.cmd;
+		
+		if (!finalCommand || finalCommand.trim().length === 0) {
+			vscode.window.showWarningMessage('Script button has no command to execute.');
+			return;
+		}
+	} else if (button.cmd && button.cmd.trim().length > 0) {
+		// Button uses direct command
+		finalCommand = button.cmd.trim();
+	} else {
+		vscode.window.showWarningMessage('No command specified. Please provide a valid command to execute.');
+		return;
+	}
 
 	// Handle input fields if present
 	if (button.inputs && button.inputs.length > 0) {
@@ -448,6 +501,7 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 	}
 
 	// Prepend execution directory if specified
+	// This applies to both script and command buttons
 	if (button.execDir && button.execDir.trim().length > 0 && button.execDir.trim() !== '.') {
 		finalCommand = `cd ${button.execDir.trim()} && ${finalCommand}`;
 	}
@@ -470,7 +524,9 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 		const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('DevBoost');
 		terminal.show();
 		terminal.sendText(finalCommand);
-		vscode.window.setStatusBarMessage(`Executed: ${button.name}`, 3000);
+		
+		const buttonType = button.scriptFile ? ' (script)' : '';
+		vscode.window.setStatusBarMessage(`Executed: ${button.name}${buttonType}`, 3000);
 	} catch (error) {
 		vscode.window.showErrorMessage(`Failed to execute command: ${button.name}`);
 		console.error('Command execution error:', error);
@@ -545,8 +601,8 @@ export async function addToGlobal(item: SmartCmdButtonTreeItem, buttonsProvider:
 		return;
 	}
 
-	// Use AI to validate if button is suitable for global scope
-	const safetyCheck = await vscode.window.withProgress({
+	// Use AI to validate if button is suitable for global scope, skip if it uses a script file
+	const safetyCheck = item.button.scriptFile? { isSafe: true } : await vscode.window.withProgress({
 		location: vscode.ProgressLocation.Notification,
 		title: "Analyzing button compatibility with global scope...",
 		cancellable: false
@@ -582,21 +638,74 @@ Do you want to add it to global scope anyway?`;
 		}
 	}
 
-	// Create a copy of the button for global scope
-	const globalButton: smartCmdButton = {
-		name: item.button.name,
-		execDir: '.', // Reset execDir for global button
-		cmd: item.button.cmd,
-		user_description: item.button.user_description,
-		ai_description: item.button.ai_description,
-		scope: 'global',
-	};
+	// Handle script file copying if button uses a script
+	let globalButton: smartCmdButton;
+	
+	if (item.button.scriptFile) {
+		// Button uses a script - need to copy script file to global scripts folder
+		try {
+			// Read the workspace script content
+			const scriptContent = await scriptManager.readScript(
+				item.button.scriptFile,
+				'workspace',
+				buttonsProvider.globalStoragePath
+			);
+			
+			if (!scriptContent) {
+				vscode.window.showErrorMessage('Failed to read script file. Cannot add to global.');
+				return;
+			}
+			
+			// Create button with scriptContent so it will be processed and saved in global scripts
+			globalButton = {
+				name: item.button.name,
+				execDir: '.', // Reset execDir for global button
+				cmd: '', // Will be set by processButtonWithScript
+				scriptContent: scriptContent, // Temporary field for processing
+				scriptFile: item.button.scriptFile, // Keep same filename if possible
+				user_description: item.button.user_description,
+				ai_description: item.button.ai_description,
+				inputs: item.button.inputs,
+				scope: 'global',
+			};
+			
+			// Process the script button (this will save to global scripts folder)
+			const processedButton = await scriptManager.processButtonWithScript(
+				globalButton,
+				buttonsProvider.globalStoragePath
+			);
+			
+			if (!processedButton) {
+				vscode.window.showErrorMessage('Failed to process script for global scope.');
+				return;
+			}
+			
+			globalButton = processedButton;
+			
+		} catch (error) {
+			console.error('Error copying script to global:', error);
+			vscode.window.showErrorMessage('Failed to copy script file to global scope.');
+			return;
+		}
+	} else {
+		// Regular command button - no script to copy
+		globalButton = {
+			name: item.button.name,
+			execDir: '.', // Reset execDir for global button
+			cmd: item.button.cmd,
+			user_description: item.button.user_description,
+			ai_description: item.button.ai_description,
+			inputs: item.button.inputs,
+			scope: 'global',
+		};
+	}
 
 	// Use addButtons which handles duplicate detection automatically
 	const addedCount = await buttonsProvider.addButtons([globalButton], 'global');
 	
 	if (addedCount > 0) {
-		vscode.window.showInformationMessage(`DevBoost: Button "${item.button.name}" added to global buttons.`);
+		const buttonType = item.button.scriptFile ? ' (script copied)' : '';
+		vscode.window.showInformationMessage(`DevBoost: Button "${item.button.name}" added to global buttons${buttonType}.`);
 	}
 	// If addedCount is 0, addButtons already showed appropriate warning message
 }

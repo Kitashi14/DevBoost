@@ -155,10 +155,10 @@ Existing Buttons to Check:
 ${existingButtonsInfo}
 
 Consider buttons as duplicates if they:
-1. Execute the same command (even with different variable names)
-2. Perform the same action (e.g., "git commit" vs "commit changes")
-3. Have the same functionality with minor syntax differences
-4. Have almost the same name text
+1. VERY IMPORTANT: Have any similarity in their name or description which can confuse users
+2. Execute the same command (even with different variable names)
+3. Perform the same action (e.g., "git commit" vs "commit changes")
+4. Have the same functionality with minor syntax differences
 
 Don't consider buttons as duplicates if they:
 1. Have different commands even if they seem related (e.g., "git commit" vs "git push")
@@ -380,21 +380,35 @@ ${optimizedLog.recentLogs.join('\n')}
 4. **DIRECTORY-AWARE**: Notice which directories commands are executed in (from Context.terminal.cwd)
 5. **FAILURE-PROOF DESIGN**: Address commands that failed (non-zero exit codes)
 6. **CHAIN INTELLIGENCE**: Create buttons that automate entire workflows, not just single commands
+7. **SCRIPT VS COMMAND CHAIN**: For complex workflows, generate scripts instead of command chains
 
+🔄 WHEN TO USE SCRIPTS VS COMMAND CHAINS:
+
+USE SCRIPT (scriptContent field) when workflow requires:
+• Multiple directory changes between commands
+• Complex error handling and conditional logic
+• Loops, variables, or advanced shell features
+• More than 5 chained commands
+• Need for intermediate checks or validation
+• File manipulation between steps
+• Environment variable setup and cleanup
+
+USE COMMAND CHAIN (cmd field) when workflow is:
+• Simple commands chained with &&
+• Linear execution without conditions
+• Single directory context
+• No complex error handling needed
 
 EXAMPLES OF SMART BUTTONS FROM SEQUENTIAL ANALYSIS:
+
+SIMPLE COMMAND CHAIN:
 • If you see: "npm install" → "npm run build" → "npm test" repeatedly IN SAME TERMINAL
   Create: "npm install && npm run build && npm test"
-  
-• If you see PARALLEL WORKFLOWS (different terminal IDs):
-  Terminal 12345: "cd /frontend && npm run dev" (long-running)
-  Terminal 67890: "git add . && git commit && git push" (repeated)
-  Create separate buttons for each workflow
   
 • If you see: "git add ." → "git commit -m ..." → "git push" pattern
   Create: "git add . && git commit -m '{message}' && git push"
   With inputs: [{"placeholder": "Enter commit message", "variable": "{message}"}]
-  
+
 • If you see frequent directory changes before commands
   Create: 
   	execDir: "[detected-dir]",
@@ -404,20 +418,32 @@ EXAMPLES OF SMART BUTTONS FROM SEQUENTIAL ANALYSIS:
   Command: "docker exec -it {container} bash"
   With inputs: [{"placeholder": "Container name", "variable": "{container}"}]
 
+COMPLEX SCRIPT:
+• If you see: "cd frontend && npm install" → "cd ../backend && npm install" → "cd .. && docker-compose up"
+  Use scriptContent with proper directory management and error handling
+
 🔧 ${platform} COMMAND REQUIREMENTS:
-${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed' : ''}
-${platform === 'macOS' || platform === 'Linux' ? '• Use && for chaining, Unix paths, proper shell escaping' : ''}
+${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed\n• Scripts: Use batch script syntax (.bat)' : ''}
+${platform === 'macOS' || platform === 'Linux' ? '• Use && for chaining, Unix paths, proper shell escaping\n• Scripts: Use bash/sh syntax (.sh)' : ''}
 • All commands must work reliably in ${shell}
 • Include error handling where appropriate (|| echo "Error occurred")
 
-🚨 IMPORTANT RULE - EMOJIS:
+🚨 CRITICAL RULE - EMOJIS:
 • ONLY use emoji/icon in the "name" field at the beginning (e.g., "🚀 Build Project")
-• NEVER use emojis, icons, or special characters in the "cmd" field - it must be plain terminal command text only
+• NEVER use emojis, icons, or special characters in the "cmd" or "scriptContent" fields - plain text only
 • NEVER use emojis, icons, or special characters in the "ai_description" field
+• These fields are executed directly in the terminal - any emoji will cause execution failure
+
+Provide:
+1. A short descriptive name (with an emoji prefix, max 30 characters)
+2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
+3. A brief description of what the button does (this will be stored as ai_description) - NO EMOJIS
+4. If the command needs user input, include input fields with placeholders (use {variableName} format)
+5. execDir: where to run from (applies to both cmd and scriptContent)
 
 📝 RESPONSE FORMAT (JSON only):
 
-WITHOUT INPUT FIELDS - CORRECT FORMAT:
+SIMPLE COMMAND CHAIN FORMAT:
 [
     {
 		"name": "🚀 Build and Deploy",
@@ -433,7 +459,17 @@ WITHOUT INPUT FIELDS - CORRECT FORMAT:
     }
 ]
 
-WITH INPUT FIELDS - CORRECT FORMAT:
+SCRIPT FORMAT (for complex workflows):
+[
+    {
+        "name": "� Multi-Service Setup",
+        "execDir": "/path/to/workspace",
+        "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
+        "ai_description": "Sets up frontend, backend, and starts Docker services"
+    }
+]
+
+WITH INPUT FIELDS - COMMAND FORMAT:
 [
     {
         "name": "📝 Git Commit & Push",
@@ -465,6 +501,22 @@ WITH INPUT FIELDS - CORRECT FORMAT:
     }
 ]
 
+WITH INPUT FIELDS - SCRIPT FORMAT:
+[
+    {
+        "name": "� Deploy to Environment",
+        "execDir": "/path/to/project",
+        "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi",
+        "ai_description": "Builds project and deploys to specified environment with error checking",
+        "inputs": [
+            {
+                "placeholder": "Environment (dev/staging/prod)",
+                "variable": "{env}"
+            }
+        ]
+    }
+]
+
 WRONG FORMAT (DO NOT DO THIS):
 [
     {
@@ -476,6 +528,7 @@ WRONG FORMAT (DO NOT DO THIS):
 ]
 
 Analyze the sequential logs carefully and generate 3-5 buttons that automate the ACTUAL workflows you observe.
+Choose between cmd and scriptContent based on workflow complexity.
 RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 
 		// Log prompt for development
@@ -503,7 +556,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 		if (jsonMatch) {
 			const buttons = JSON.parse(jsonMatch[0]) as smartCmdButton[];
 			console.log('Parsed buttons from AI response:', buttons);
-			return buttons.filter(b => b.name && b.cmd);
+			return buttons.filter(b => b.name && (b.cmd || b.scriptContent));
 		}
 
 		vscode.window.showWarningMessage('Could not parse AI response. Using fallback suggestions.');
@@ -562,7 +615,7 @@ IMPORTANT: Since this button is workspace-specific, you can:
 			}
 
 			workspaceSpecificExamples = `CORRECT FORMAT:
-using no inputs with absolute execDir:
+WITHOUT INPUT FIELDS WITH ABSOLUTE execDir - COMMAND:
 {
     "name": "🔨 Build Project",
 	"execDir": "/path/to/project",
@@ -570,7 +623,7 @@ using no inputs with absolute execDir:
     "ai_description": "Builds the project using npm"
 }
 
-no input with relative/currentDir execDir:
+WITHOUT INPUT FIELDS WITH RELATIVE/CURRENT execDir - COMMAND:
 {
 	"name": "🚀 List all files in current directory",
 	"execDir": ".",
@@ -578,7 +631,7 @@ no input with relative/currentDir execDir:
 	"ai_description": "Lists all files in the current directory"
 }
 
-Or with inputs:
+WITH INPUT FIELDS - COMMAND:
 {
     "name": "📝 Git Commit",
 	"execDir": "/path/to/repo",
@@ -590,6 +643,22 @@ Or with inputs:
             "variable": "{message}"
         }
     ]
+}
+COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
+{
+    "name": "🔧 Multi-Service Setup",
+    "execDir": "/path/to/workspace",
+    "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
+    "ai_description": "Sets up frontend, backend, and starts Docker services"
+}
+
+WITH INPUT FIELDS - SCRIPT:
+{
+    "name": "🚀 Deploy to Environment",
+    "execDir": "/path/to/project",
+    "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
+    "ai_description": "Builds and deploys to specified environment with error checking",
+    "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
 }
 
 WRONG FORMAT (DO NOT DO THIS):
@@ -612,21 +681,21 @@ IMPORTANT: Since this button is global, you should:
 `;
 
 			workspaceSpecificExamples = `CORRECT FORMAT:
-using no inputs with generic execDir:
+WITHOUT INPUT FIELDS WITH GENERIC EXECUTION PATH - COMMAND:
 {
     "name": "🔨 Build Project",
     "cmd": "npm run build",
     "ai_description": "Builds the project using npm"
 }
 
-no input with relative/currentDir execDir:
+WITHOUT INPUT FIELDS WITH ANY POSSIBLE EXECUTION PATH - COMMAND:
 {
 	"name": "🚀 List all files in current directory",
 	"cmd": "ls -la",
 	"ai_description": "Lists all files in the current directory"
 }
 
-Or with inputs:
+WITH INPUT FIELDS - COMMAND:
 {
     "name": "📝 Git Commit",
     "cmd": "git add . && git commit -m '{message}'",
@@ -637,6 +706,20 @@ Or with inputs:
             "variable": "{message}"
         }
     ]
+}
+COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
+{
+    "name": "🔧 Multi-Service Setup",
+    "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
+    "ai_description": "Sets up frontend, backend, and starts Docker services"
+}
+
+WITH INPUT FIELDS - SCRIPT:
+{
+    "name": "🚀 Deploy to Environment",
+    "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
+    "ai_description": "Builds and deploys to specified environment with error checking",
+    "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
 }
 
 WRONG FORMAT (DO NOT DO THIS):
@@ -656,19 +739,38 @@ SYSTEM INFORMATION:
 ${workspaceContext}
 
 IMPORTANT: Generate commands that are compatible with ${platform} and ${shell}.
-${platform === 'Windows' ? '- Use Windows-compatible commands (e.g., PowerShell or cmd syntax)' : ''}
-${platform === 'macOS' || platform === 'Linux' ? '- Use Unix/Linux-compatible commands (bash/zsh syntax)' : ''}
+${platform === 'Windows' ? '- Use Windows-compatible commands (e.g., PowerShell or cmd syntax)\n- Scripts: Use batch script syntax (.bat)' : ''}
+${platform === 'macOS' || platform === 'Linux' ? '- Use Unix/Linux-compatible commands (bash/zsh syntax)\n- Scripts: Use bash/sh syntax (.sh)' : ''}
+
+🔄 WHEN TO USE SCRIPTS VS COMMAND CHAINS:
+
+USE SCRIPT (scriptContent field) when the task requires:
+• When asked to generate script
+• Multiple directory changes between commands
+• Complex error handling and conditional logic
+• Loops, variables, or advanced shell features
+• More than 5 chained commands
+• Need for intermediate checks or validation
+• File manipulation between steps
+• Environment variable setup and cleanup
+
+USE COMMAND CHAIN (cmd field) when the task is:
+• Simple 1-3 commands chained with &&
+• Linear execution without conditions
+• Single directory context
+• No complex error handling needed
+
 🚨 CRITICAL RULE - EMOJIS:
 • ONLY use emoji/icon in the "name" field at the beginning (e.g., "🚀 Build Project")
-• NEVER use emojis, icons, or special characters in the "cmd" field - it must be plain terminal command text only
+• NEVER use emojis, icons, or special characters in the "cmd" or "scriptContent" fields - plain text only
 • NEVER use emojis, icons, or special characters in the "ai_description" field
-• The "cmd" field will be executed directly in the terminal - any emoji will cause execution failure
+• These fields are executed directly in the terminal - any emoji will cause execution failure
 
 Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
-2. The exact command to execute (terminal command or VS Code command like "workbench.action.files.saveAll") - MUST be compatible with ${platform}
+2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as ai_description) - NO EMOJIS
-4. If the command needs user input, include input fields with placeholders (use {variableName} format in cmd)
+4. If the command needs user input, include input fields with placeholders (use {variableName} format)
 
 The user provided this description: "${description}" (this will be stored as user_description)
 
@@ -708,7 +810,7 @@ Only respond with the JSON object, no additional text.`;
 				const jsonString = cleanedResponse.substring(firstBrace, lastBrace + 1);
 				const button = JSON.parse(jsonString) as smartCmdButton;
 				
-				if (button.name && button.cmd && button.ai_description) {
+				if (button.name && (button.cmd || button.scriptContent) && button.ai_description) {
 					button.user_description = description;
 					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
 					console.log('Successfully parsed button:', button);

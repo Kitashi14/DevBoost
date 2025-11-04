@@ -29,7 +29,7 @@ export async function activateSmartCmd(
 	}
 
 	// Create and register the tree view provider for SmartCmd
-	const buttonsProvider = new SmartCmdButtonsTreeProvider(context, globalButtonsPath);
+	const buttonsProvider = new SmartCmdButtonsTreeProvider(context, globalButtonsPath, globalStoragePath);
 	const treeView = vscode.window.createTreeView('devboost.buttonsView', {
 		treeDataProvider: buttonsProvider,
 		showCollapseAll: false
@@ -107,6 +107,10 @@ export async function activateSmartCmd(
 		await handlers.openButtonsFile(item, globalButtonsPath);
 	});
 
+	const openScriptFileDisposable = vscode.commands.registerCommand('devboost.openScriptFile', async (item: SmartCmdButtonTreeItem) => {
+		await buttonsProvider.openScriptFile(item);
+	});
+
 	// Register all SmartCmd commands
 	context.subscriptions.push(
 		createAIButtonsDisposable,
@@ -116,7 +120,8 @@ export async function activateSmartCmd(
 		editButtonDisposable,
 		addToGlobalDisposable,
 		refreshButtonsDisposable,
-		openButtonsFileDisposable
+		openButtonsFileDisposable,
+		openScriptFileDisposable
 	);
 
 	// Listen for workspace folder changes to reload buttons
