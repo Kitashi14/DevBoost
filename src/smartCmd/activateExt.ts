@@ -30,7 +30,7 @@ export async function activateSmartCmd(
 
 	// Create and register the tree view provider for SmartCmd
 	const buttonsProvider = new SmartCmdButtonsTreeProvider(context, globalButtonsPath);
-	const treeView = vscode.window.createTreeView('devboost.buttonsView', {
+	const treeView = vscode.window.createTreeView('devboost.smartCmdView', {
 		treeDataProvider: buttonsProvider,
 		showCollapseAll: false
 	});
@@ -44,15 +44,20 @@ export async function activateSmartCmd(
 		await handlers.createAIButtons(activityLogPath, buttonsProvider);
 	});
 
+	// Register enhanced AI buttons command (using same function as regular AI buttons)
+	const createAIButtonsEnhancedDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateButtonsEnhanced', async () => {
+		await handlers.createAIButtons(activityLogPath, buttonsProvider);
+	});
+
 	const createCustomButtonDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateCustomButton', async (sectionObj: any) => {
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
-			if(sectionObj.section == 'global') 
+			if(sectionObj.section === 'global'){ 
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Global');
-			else 
+			} else {
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Workspace');
-		}
-		else {
+			}
+		} else {
 			await handlers.createCustomButton(promptInputPath, buttonsProvider);
 		}
 	});
@@ -107,9 +112,10 @@ export async function activateSmartCmd(
 		await handlers.openButtonsFile(item, globalButtonsPath);
 	});
 
-	// Register all SmartCmd commands
+	// Register all disposables
 	context.subscriptions.push(
 		createAIButtonsDisposable,
+		createAIButtonsEnhancedDisposable,
 		createCustomButtonDisposable,
 		executeButtonDisposable,
 		deleteButtonDisposable,

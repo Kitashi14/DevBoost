@@ -166,14 +166,8 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 	}
 
 	getChildren(element?: SmartCmdTreeItemBase): Thenable<SmartCmdTreeItemBase[]> {
-		// Root level: show SmartCmd parent
+		// Root level: show sections directly (Global and Workspace)
 		if (!element) {
-			const totalButtons = this.buttons.length;
-			return Promise.resolve([new SmartCmdParentTreeItem(totalButtons)]);
-		}
-
-		// If element is SmartCmd, return sections (Global and Workspace)
-		if (element instanceof SmartCmdParentTreeItem) {
 			const globalButtons = this.buttons.filter(b => b.scope === 'global');
 			const workspaceButtons = this.buttons.filter(b => b.scope === 'workspace');
 
@@ -187,6 +181,37 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			// Add Workspace section if there are workspace buttons
 			if (workspaceButtons.length > 0) {
 				sections.push(new SmartCmdSectionTreeItem('workspace', workspaceButtons.length));
+			}
+
+			// If no buttons exist, show helpful actions
+			if (sections.length === 0) {
+				const createButtonItem = new SmartCmdTreeItemBase(
+					'Create Your First Button',
+					vscode.TreeItemCollapsibleState.None,
+					'section'
+				);
+				createButtonItem.description = 'Click to get started';
+				createButtonItem.iconPath = new vscode.ThemeIcon('add');
+				createButtonItem.contextValue = 'createFirstButton';
+				createButtonItem.command = {
+					command: 'devboost.smartCmdCreateCustomButton',
+					title: 'Create Custom Button'
+				};
+				sections.push(createButtonItem);
+				
+				const createAIButtonItem = new SmartCmdTreeItemBase(
+					'Create AI Suggested Buttons',
+					vscode.TreeItemCollapsibleState.None,
+					'section'
+				);
+				createAIButtonItem.description = 'Based on your activity';
+				createAIButtonItem.iconPath = new vscode.ThemeIcon('sparkle');
+				createAIButtonItem.contextValue = 'createAIButtons';
+				createAIButtonItem.command = {
+					command: 'devboost.smartCmdCreateButtons',
+					title: 'Create AI Buttons'
+				};
+				sections.push(createAIButtonItem);
 			}
 
 			return Promise.resolve(sections);
@@ -237,8 +262,14 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 				const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope);
 
 				if (duplicateButton) {
-					duplicateButtons.push({newButton: b, existingButton: duplicateButton});
-					console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateButton.name + ')');
+					// Find the actual button object from existing buttons
+					const existingButton = this.buttons.find(btn => btn.name === duplicateButton);
+					if (existingButton) {
+						duplicateButtons.push({newButton: b, existingButton: existingButton});
+						console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateButton + ')');
+					} else {
+						validButtons.push(b);
+					}
 				} else {
 					validButtons.push(b);
 				}
