@@ -39,21 +39,6 @@ class SmartCmdTreeItemBase extends vscode.TreeItem {
 	}
 }
 
-// SmartCmd parent tree item
-class SmartCmdParentTreeItem extends SmartCmdTreeItemBase {
-	constructor(
-		public readonly totalButtons: number
-	) {
-		super(
-			'SmartCmd',
-			vscode.TreeItemCollapsibleState.Expanded,
-			'smartcmd'
-		);
-		this.description = `${totalButtons} button${totalButtons !== 1 ? 's' : ''}`;
-		this.contextValue = 'smartcmd';
-	}
-}
-
 // Section tree item (parent nodes for Global/Workspace)
 class SmartCmdSectionTreeItem extends SmartCmdTreeItemBase {
 	constructor(
@@ -183,14 +168,8 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 	}
 
 	getChildren(element?: SmartCmdTreeItemBase): Thenable<SmartCmdTreeItemBase[]> {
-		// Root level: show SmartCmd parent
+		// Root level: show sections directly (Global and Workspace)
 		if (!element) {
-			const totalButtons = this.buttons.length;
-			return Promise.resolve([new SmartCmdParentTreeItem(totalButtons)]);
-		}
-
-		// If element is SmartCmd, return sections (Global and Workspace)
-		if (element instanceof SmartCmdParentTreeItem) {
 			const globalButtons = this.buttons.filter(b => b.scope === 'global');
 			const workspaceButtons = this.buttons.filter(b => b.scope === 'workspace');
 
@@ -760,5 +739,4 @@ What would you like to do?`;
 		}
 	}
 }
-
 

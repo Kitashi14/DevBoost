@@ -31,7 +31,7 @@ export async function activateSmartCmd(
 
 	// Create and register the tree view provider for SmartCmd
 	const buttonsProvider = new SmartCmdButtonsTreeProvider(context, globalButtonsPath, globalStoragePath);
-	const treeView = vscode.window.createTreeView('devboost.buttonsView', {
+	const treeView = vscode.window.createTreeView('devboost.smartCmdView', {
 		treeDataProvider: buttonsProvider,
 		showCollapseAll: false
 	});
@@ -51,10 +51,12 @@ export async function activateSmartCmd(
 	const createCustomButtonDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateCustomButton', async (sectionObj: any) => {
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
-			if(sectionObj.section == 'global') 
+			if(sectionObj.section == 'global'){ 
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Global');
-			else 
+			}
+			else {
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Workspace');
+			}
 		}
 		else {
 			await handlers.createCustomButton(promptInputPath, buttonsProvider);
@@ -221,7 +223,7 @@ async function loadExampleButtonsIfNeeded(
 				'View Buttons'
 			).then(selection => {
 				if (selection === 'View Buttons') {
-					vscode.commands.executeCommand('devboost.buttonsView.focus');
+					vscode.commands.executeCommand('devboost.smartCmdView.focus');
 				}
 			});
 		}

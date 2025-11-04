@@ -4,6 +4,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as activityLogging from './activityLogging';
 import { activateSmartCmd } from './smartCmd/activateExt';
+import { registerPromptEnhancerCommands } from './promptEnhancer/promptEnhancer';
+import { PromptEnhancerTreeProvider } from './promptEnhancer/treeProvider';
 
 // Global variables
 let activityLogPath: string | undefined;
@@ -49,6 +51,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// // Activate SmartCmd tool
 	await activateSmartCmd(context, globalStoragePath, activityLogPath, promptInputPath);
+
+	// Register Prompt Enhancer commands
+	registerPromptEnhancerCommands(context);
+
+	// Register Prompt Enhancer tree provider
+	const promptEnhancerProvider = new PromptEnhancerTreeProvider(context);
+	vscode.window.createTreeView('devboost.promptEnhancerView', {
+		treeDataProvider: promptEnhancerProvider,
+		showCollapseAll: false
+	});
 
 	// Register test Command
 	const helloWorldDisposable = vscode.commands.registerCommand('DevBoost.helloWorld', () => {
