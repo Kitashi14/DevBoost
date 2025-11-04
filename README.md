@@ -95,6 +95,19 @@ Transform your prompts before sending them to AI, similar to Webex's rewrite mes
 - **Context Menu**: Right-click selected text
 - **SmartCmd Integration**: Automatic option during AI interactions
 
+#### Debug & Development Logging
+
+The Prompt Enhancer includes comprehensive logging for development and debugging:
+
+- **Log File**: `.vscode/ai_prompts_enhancer.log`
+- **What's Logged**: Complete AI interactions including prompts sent, responses received, and metadata
+- **Functions Logged**: 
+  - `getPromptEnhancementSuggestions` - Enhancement analysis
+  - `applyEnhancements` - Enhancement application
+  - `generatePromptFromIntent` - Prompt generation
+  - `quickEnhancePrompt` - Quick enhancement operations
+- **Toggle**: Set `ENABLE_PROMPT_LOGGING = false` in `aiServices.ts` to disable
+
 ### 📊 Activity Logging & Analysis
 
 DevBoost intelligently tracks your development activities to understand your workflow patterns.

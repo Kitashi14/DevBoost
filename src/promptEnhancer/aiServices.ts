@@ -1,5 +1,57 @@
 // Prompt Enhancer AI Services - Handles AI interactions for prompt enhancement
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+// Enable prompt logging for development/debugging
+const ENABLE_PROMPT_LOGGING = true;
+
+/**
+ * Log AI prompts to file for development/debugging purposes
+ */
+async function logPromptToFile(functionName: string, prompt: string, response: string, metadata?: any): Promise<void> {
+	if (!ENABLE_PROMPT_LOGGING) {
+		return;
+	}
+
+	try {
+		// Get workspace folder for log file
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (!workspaceFolder) {
+			return;
+		}
+
+		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'ai_prompts_enhancer.log');
+		
+		// Ensure directory exists
+		await fs.mkdir(path.dirname(logFilePath), { recursive: true });
+
+		const timestamp = new Date().toISOString();
+		const logEntry = `
+${'='.repeat(80)}
+TIMESTAMP: ${timestamp}
+FUNCTION: ${functionName}
+METADATA: ${metadata ? JSON.stringify(metadata, null, 2) : 'N/A'}
+
+${'='.repeat(80)}
+PROMPT:
+${prompt}
+
+${'='.repeat(80)}
+RESPONSE:
+${response}
+${'='.repeat(80)}
+${'='.repeat(80)}
+
+`;
+
+		// Append to log file
+		await fs.appendFile(logFilePath, logEntry, 'utf-8');
+		console.log(`DevBoost: Logged prompt enhancer from ${functionName} to ${logFilePath}`);
+	} catch (error) {
+		console.error('DevBoost: Error logging prompt enhancer to file:', error);
+	}
+}
 
 export interface EnhancementSuggestion {
 	type: 'clarity' | 'specificity' | 'context' | 'structure' | 'examples';
@@ -67,10 +119,26 @@ RESPOND WITH JSON ARRAY ONLY:
 			if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
 				const jsonString = cleanedResponse.substring(firstBracket, lastBracket + 1);
 				const suggestions = JSON.parse(jsonString) as EnhancementSuggestion[];
-				return suggestions.filter(s => s.type && s.suggestion && s.priority);
+				const filteredSuggestions = suggestions.filter(s => s.type && s.suggestion && s.priority);
+				
+				// Log the AI interaction
+				await logPromptToFile('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
+					originalPrompt: prompt,
+					suggestionsCount: filteredSuggestions.length,
+					rawResponseLength: fullResponse.length
+				});
+				
+				return filteredSuggestions;
 			}
 		} catch (parseError) {
 			console.error('Error parsing enhancement suggestions:', parseError);
+			
+			// Log the failed AI interaction
+			await logPromptToFile('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
+				originalPrompt: prompt,
+				error: 'Parse error',
+				parseError: parseError instanceof Error ? parseError.message : String(parseError)
+			});
 		}
 
 		return [];
@@ -120,9 +188,29 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 			enhancedPrompt += part;
 		}
 
-		return enhancedPrompt.trim() || originalPrompt;
+		const finalResult = enhancedPrompt.trim() || originalPrompt;
+		
+		// Log the AI interaction
+		await logPromptToFile('applyEnhancements', applyPrompt, enhancedPrompt, {
+			originalPrompt,
+			selectedSuggestions,
+			enhancementDetails,
+			enhancedPromptLength: finalResult.length,
+			wasEnhanced: finalResult !== originalPrompt
+		});
+
+		return finalResult;
 	} catch (error) {
 		console.error('Error applying enhancements:', error);
+		
+		// Log the failed AI interaction
+		await logPromptToFile('applyEnhancements', 'N/A - Error occurred', 'N/A - Error occurred', {
+			originalPrompt,
+			selectedSuggestions,
+			error: error instanceof Error ? error.message : String(error),
+			fallbackToOriginal: true
+		});
+		
 		return originalPrompt;
 	}
 }
@@ -164,9 +252,29 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 			generatedPrompt += part;
 		}
 
-		return generatedPrompt.trim() || intent;
+		const finalResult = generatedPrompt.trim() || intent;
+		
+		// Log the AI interaction
+		await logPromptToFile('generatePromptFromIntent', generationPrompt, generatedPrompt, {
+			userIntent: intent,
+			domain,
+			domainContext,
+			generatedPromptLength: finalResult.length,
+			wasGenerated: finalResult !== intent
+		});
+
+		return finalResult;
 	} catch (error) {
 		console.error('Error generating prompt from intent:', error);
+		
+		// Log the failed AI interaction
+		await logPromptToFile('generatePromptFromIntent', 'N/A - Error occurred', 'N/A - Error occurred', {
+			userIntent: intent,
+			domain,
+			error: error instanceof Error ? error.message : String(error),
+			fallbackToIntent: true
+		});
+		
 		return intent;
 	}
 }
@@ -208,9 +316,26 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO EXPLANATION:`;
 			enhancedPrompt += part;
 		}
 
-		return enhancedPrompt.trim() || originalPrompt;
+		const finalResult = enhancedPrompt.trim() || originalPrompt;
+		
+		// Log the AI interaction
+		await logPromptToFile('quickEnhancePrompt', quickEnhancePrompt, enhancedPrompt, {
+			originalPrompt,
+			enhancedPromptLength: finalResult.length,
+			wasEnhanced: finalResult !== originalPrompt
+		});
+
+		return finalResult;
 	} catch (error) {
 		console.error('Error in quick enhance:', error);
+		
+		// Log the failed AI interaction
+		await logPromptToFile('quickEnhancePrompt', 'N/A - Error occurred', 'N/A - Error occurred', {
+			originalPrompt,
+			error: error instanceof Error ? error.message : String(error),
+			returnedNull: true
+		});
+		
 		return null;
 	}
 }
