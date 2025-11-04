@@ -6,7 +6,9 @@ import * as aiServices from './aiServices';
 import * as activityLogging from '../activityLogging';
 import * as scriptManager from './scriptManager';
 import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButtonTreeItem } from './treeProvider';
-import { CustomDialog } from '../customDialog';
+import { CustomDialog } from '../commonView/customDialog';
+import { InputFormPanel } from '../commonView/inputFormPanel';
+import { ButtonFormPanel } from './view/manualButtonFormPanel';
 import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
 
 // Create AI-suggested buttons based on activity log
@@ -158,7 +160,8 @@ AI description: ${button.ai_description}
 What would you like to do?`,
 					buttons: [
 						{ label: 'Accept', id: 'Accept', isPrimary: true },
-						{ label: 'Edit AI Description', id: 'Edit AI Description' }
+						{ label: 'Edit Name or AI Description', id: 'Edit Name or AI Description' },
+						{ label: 'Skip', id: 'Skip' }
 					],
 					markdown: false
 				});
@@ -167,30 +170,51 @@ What would you like to do?`,
 					// Add button immediately for real-time duplicate detection
 					const addedCount = await buttonsProvider.addButtons([button], 'workspace');
 					acceptedCount += addedCount;
-				} else if (buttonChoice === 'Edit AI Description') {
+				} else if (buttonChoice === 'Edit Name or AI Description') {
 
-					const editedDescription = await vscode.window.showInputBox({
-						prompt: 'Edit the AI-generated description',
-						value: button.ai_description,
-						placeHolder: 'Enter a better description for this button',
-						validateInput: (value) => {
-							if (!value || value.trim().length === 0) {
-								return 'Description cannot be empty';
+					const editedResult = await InputFormPanel.show(
+						'Edit Button Details',
+						[
+							{
+								id: 'name',
+								label: 'Button Name',
+								defaultValue: button.name,
+								placeholder: 'Enter button name',
+								required: true,
+								validation: (value) => {
+									if (!value || value.trim().length === 0) {
+										return 'Button name cannot be empty';
+									}
+									if (value.length > 50) {
+										return 'Button name is too long (max 50 characters)';
+									}
+									return null;
+								}
+							},
+							{
+								id: 'description',
+								label: 'AI Description',
+								defaultValue: button.ai_description,
+								placeholder: 'Enter a better description for this button',
+								multiline: true
 							}
-							return null;
-						}
-					});
+						],
+						'Save Changes'
+					);
 
-					if (!editedDescription) {
+					if (!editedResult) {
 						continue;
 					}
-					button.ai_description = editedDescription.trim();
-
+					
+					button.name = editedResult.name.trim();
+					button.ai_description = editedResult.description.trim();					
 					const addedCount = await buttonsProvider.addButtons([button], 'workspace');
 					acceptedCount += addedCount;
-				}
-				else {
-					return;
+				} else if (buttonChoice === 'Skip') {
+					// Skip this button
+					continue;
+				} else {
+						return;
 				}
 			}
 
@@ -272,10 +296,10 @@ async function createCustomButtonInternal(
 	}
 
 	if (useAI === 'No') {
-		const button = await getManualButtonInput(scopeInput === 'Workspace' ? "workspace" : "global");
+		const button = await ButtonFormPanel.show(scopeInput === 'Workspace' ? "workspace" : "global");
 
 		if (!button) {
-			vscode.window.showWarningMessage('Could not generate button. Please try again.');
+			vscode.window.showInformationMessage('Button creation cancelled.');
 			return;
 		}
 
@@ -414,7 +438,7 @@ Do you want to create this button?`;
 				message: confirmationMessage,
 				buttons: [
 					{ label: 'Create Button', id: 'Create Button', isPrimary: true },
-					{ label: 'Edit AI Description', id: 'Edit AI Description' }
+					{ label: 'Edit Name or AI Description', id: 'Edit Name or AI Description' }
 				],
 				markdown: false
 			});
@@ -426,38 +450,52 @@ Do you want to create this button?`;
 
 			let finalButton = button;
 
-			if (choice === 'Edit AI Description') {
-				// Allow user to edit the AI description
-				const editedDescription = await vscode.window.showInputBox({
-					prompt: 'Edit the AI-generated description',
-					value: button.ai_description,
-					placeHolder: 'Enter a better description for this button',
-					validateInput: (value) => {
-						if (!value || value.trim().length === 0) {
-							return 'Description cannot be empty';
+			if (choice === 'Edit Name or AI Description') {
+				const editedResult = await InputFormPanel.show(
+					'Edit Button Details',
+					[
+						{
+							id: 'name',
+							label: 'Button Name',
+							defaultValue: button.name,
+							placeholder: 'Enter button name',
+							required: true,
+							validation: (value) => {
+								if (!value || value.trim().length === 0) {
+									return 'Button name cannot be empty';
+								}
+								if (value.length > 50) {
+									return 'Button name is too long (max 50 characters)';
+								}
+								return null;
+							}
+						},
+						{
+							id: 'description',
+							label: 'AI Description',
+							defaultValue: button.ai_description,
+							placeholder: 'Enter a better description for this button',
+							multiline: true,
+							required: false,
 						}
-						return null;
-					}
-				});
+					],
+					'Save Changes'
+				);
 
-				if (!editedDescription) {
-					vscode.window.showInformationMessage('Button creation cancelled.');
+				if (!editedResult) {
 					return;
 				}
-
-				// Update the button with edited description
-				finalButton = {
-					...button,
-					ai_description: editedDescription.trim()
-				};
+				
+				button.name = editedResult.name.trim();
+				button.ai_description = editedResult.description.trim();			
 			}
 
 			// Add button to tree view
 			const scopeType = scope === 'Global' ? 'global' : 'workspace';
-			const addedCount = await buttonsProvider.addButtons([finalButton], scopeType);
+			const addedCount = await buttonsProvider.addButtons([button], scopeType);
 
 			if (addedCount > 0) {
-				vscode.window.showInformationMessage(`Created custom button: ${finalButton.name}`);
+				vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
 			}
 		});
 
@@ -731,94 +769,4 @@ Do you want to add it to global scope anyway?`;
 		vscode.window.showInformationMessage(`DevBoost: Button "${item.button.name}" added to global buttons${buttonType}.`);
 	}
 	// If addedCount is 0, addButtons already showed appropriate warning message
-}
-
-// Helper function to get manual button input as fallback
-async function getManualButtonInput(scope: 'workspace' | 'global'): Promise<smartCmdButton | null> {
-	const name = await vscode.window.showInputBox({
-		prompt: 'Enter button name',
-		validateInput: (value) => {
-			if (!value || value.trim().length === 0) {
-				return 'Button name cannot be empty';
-			}
-			if (value.length > 50) {
-				return 'Button name is too long (max 50 characters)';
-			}
-			return null;
-		}
-	});
-
-	if (!name) {
-		vscode.window.showInformationMessage('Button creation cancelled.');
-		return null;
-	}
-	
-	const descriptionInput = await vscode.window.showInputBox({
-		prompt: 'Edit button description',
-		placeHolder: 'Brief description of what this button does'
-	});
-
-	const execDir = await vscode.window.showInputBox({
-		prompt: 'Enter execution directory',
-		value: scope === 'workspace' && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
-			? vscode.workspace.workspaceFolders[0].uri.fsPath
-			: '.',
-		placeHolder: 'e.g., ./src, /usr/local/bin, etc.'
-	});
-
-	let finalExecDir = '.';
-	if (execDir && execDir.trim().length > 0) {
-		finalExecDir = execDir.trim();
-	}
-
-	const cmd = await vscode.window.showInputBox({
-		prompt: 'Enter command to execute (use {variableName} for inputs)',
-		placeHolder: 'e.g., git commit -m \'{message}\' or npm test',
-		validateInput: (value) => {
-			if (!value || value.trim().length === 0) {
-				return 'Command cannot be empty';
-			}
-			return null;
-		}
-	});
-
-	if (!cmd) {
-		vscode.window.showInformationMessage('Button creation cancelled.');
-		return null;
-	}
-
-	// Check if command has input placeholders
-	const inputMatches = cmd.match(/\{(\w+)\}/g);
-	const inputs: InputField[] = [];
-
-	if (inputMatches && inputMatches.length > 0) {
-		for (const match of inputMatches) {
-			const variable = match;
-			const varName = match.slice(1, -1); // Remove { and }
-			
-			const placeholder = await vscode.window.showInputBox({
-				prompt: `Enter placeholder text for ${variable}`,
-				placeHolder: `e.g., Enter ${varName}`
-			});
-
-			if (placeholder) {
-				inputs.push({
-					placeholder: placeholder.trim(),
-					variable: variable
-				});
-			}
-			else {
-				vscode.window.showInformationMessage('Button creation cancelled.');
-				return null;
-			}
-		}
-	}
-
-	return {
-		name: name.trim(),
-		cmd: cmd.trim(),
-		user_description: descriptionInput?.trim(), // Store as user_description
-		inputs: inputs.length > 0 ? inputs : undefined,
-		execDir: finalExecDir
-	};
 }

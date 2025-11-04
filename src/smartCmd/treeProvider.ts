@@ -4,7 +4,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as aiServices from './aiServices';
 import * as scriptManager from './scriptManager';
-import { CustomDialog } from '../customDialog';
+import { CustomDialog } from '../commonView/customDialog';
+import { EditButtonFormPanel } from './view/editButtonFormPanel';
 
 // Input field interface for commands that need user input
 export interface InputField {
@@ -369,6 +370,7 @@ What would you like to do?`;
 					if (dup.newButton.scriptFile) {
 						await scriptManager.deleteScript(dup.newButton.scriptFile, scope, this.globalStoragePath);
 					}
+					continue;
 				}
 				else {
 					// User closed dialog or unknown option - treat as Skip for every other duplicate
@@ -478,120 +480,16 @@ What would you like to do?`;
 
 		const button = this.buttons[index];
 
-		// Get new name
-		const newName = await vscode.window.showInputBox({
-			prompt: 'Edit button name',
-			value: button.name,
-			validateInput: (value) => {
-				if (!value || value.trim().length === 0) {
-					return 'Button name cannot be empty';
-				}
-				return null;
-			}
-		});
+		// Show edit form
+		const editedButton = await EditButtonFormPanel.show(button);
 
-		if (!newName) {
+		if (!editedButton) {
 			vscode.window.showInformationMessage('Edit cancelled.');
 			return;
 		}
 
-		let newDescription: string | undefined = undefined;
-		// Get new description
-		if(button.ai_description) {
-			const currentDesc = button.ai_description || '';
-			newDescription = await vscode.window.showInputBox({
-				prompt: 'Edit AI-generated description',
-				value: currentDesc,
-				placeHolder: 'Brief description of what this button does'
-			});
-		}
-		else {
-			const currentDesc = button.ai_description || '';
-			newDescription = await vscode.window.showInputBox({
-			prompt: 'Edit user description',
-			value: currentDesc,
-			placeHolder: 'Brief description of what this button does'
-		});
-		}
-		
-		// If user cancelled description input
-		if (newDescription === undefined) {
-			vscode.window.showInformationMessage('Edit cancelled.');
-			return;
-		}
-
-		// Get new execDir
-		const newExecDir = await vscode.window.showInputBox({
-			prompt: 'Edit execution directory (relative to workspace root)',
-			value: button.execDir || '.',
-			placeHolder: 'e.g., ., ./src, ./scripts, /usr/local/bin'
-		});
-
-		if (newExecDir === undefined) {
-			vscode.window.showInformationMessage('Edit cancelled.');
-			return;
-		}
-
-		// Get new command
-		const newCmd = await vscode.window.showInputBox({
-			prompt: 'Edit command to execute',
-			value: button.cmd,
-			validateInput: (value) => {
-				if (!value || value.trim().length === 0) {
-					return 'Command cannot be empty';
-				}
-				return null;
-			}
-		});
-
-		if (!newCmd) {
-			vscode.window.showInformationMessage('Edit cancelled.');
-			return;
-		}
-
-		// Check if command has input placeholders
-		const inputMatches = newCmd.match(/\{(\w+)\}/g);
-		const inputs: InputField[] = [];
-
-		if (inputMatches && inputMatches.length > 0) {
-			for (const match of inputMatches) {
-				const variable = match;
-				const varName = match.slice(1, -1); // Remove { and }
-				
-				const placeholder = await vscode.window.showInputBox({
-					prompt: `Enter placeholder text for ${variable}`,
-					value: button.inputs?.find(i => i.variable === variable)?.placeholder || `Enter value for ${varName}`
-				});
-
-				if (placeholder) {
-					inputs.push({
-						placeholder: placeholder.trim(),
-						variable: variable
-					});
-				}
-				else {
-					vscode.window.showInformationMessage('Edit cancelled.');
-					return;
-				}
-			}
-		}
-		
-
-		// Update button - keep user_description, preserve ai_description
-		this.buttons[index] = {
-			...button,
-			name: newName.trim(),
-			execDir: newExecDir?.trim() || button.execDir,
-			cmd: newCmd?.trim() || button.cmd
-		};
-		if(button.ai_description) {
-			this.buttons[index].ai_description = newDescription?.trim() || button.ai_description;
-		} else {
-			this.buttons[index].user_description = newDescription?.trim() || button.user_description;
-		}
-		if(inputs.length != 0) {
-			this.buttons[index].inputs = inputs;
-		}
+		// Update button
+		this.buttons[index] = editedButton;
 
 		// Save to storage
 		try {
@@ -602,7 +500,7 @@ What would you like to do?`;
 			}
 			
 			this.refresh();
-			vscode.window.showInformationMessage(`Updated button: ${newName}`);
+			vscode.window.showInformationMessage(`Updated button: ${editedButton.name}`);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to update button: ${button.name}`);
 			console.error('Edit button error:', error);
@@ -634,53 +532,9 @@ What would you like to do?`;
 	}
 
 	// Edit a new button (used during duplicate detection)
+	// Edit a new button (used during duplicate detection)
 	private async editNewButton(button: smartCmdButton): Promise<smartCmdButton | null> {
-		// Get new name
-		const newName = await vscode.window.showInputBox({
-			prompt: 'Edit button name',
-			value: button.name,
-			validateInput: (value) => {
-				if (!value || value.trim().length === 0) {
-					return 'Button name cannot be empty';
-				}
-				return null;
-			}
-		});
-
-		if (!newName) {
-			vscode.window.showInformationMessage('Edit cancelled.');
-			return null;
-		}
-
-		// Get new description
-		const currentDesc = button.ai_description || button.user_description || '';
-		const descriptionPrompt = button.ai_description ? 'Edit AI-generated description' : 'Edit description';
-		
-		const newDescription = await vscode.window.showInputBox({
-			prompt: descriptionPrompt,
-			value: currentDesc,
-			placeHolder: 'Brief description of what this button does'
-		});
-		
-		// If user cancelled description input
-		if (newDescription === undefined) {
-			vscode.window.showInformationMessage('Edit cancelled.');
-			return null;
-		}
-
-		// Return updated button
-		const updatedButton = {
-			...button,
-			name: newName.trim()
-		};
-
-		if (button.ai_description) {
-			updatedButton.ai_description = newDescription.trim();
-		} else {
-			updatedButton.user_description = newDescription.trim();
-		}
-
-		return updatedButton;
+		return await EditButtonFormPanel.show(button);
 	}
 
 	// Open script file in editor

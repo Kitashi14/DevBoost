@@ -33,7 +33,7 @@ export class CustomDialog {
 			CustomDialog.currentPanel = vscode.window.createWebviewPanel(
 				'customDialog',
 				options.title,
-				vscode.ViewColumn.One,
+				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
 				{
 					enableScripts: true,
 					retainContextWhenHidden: false
