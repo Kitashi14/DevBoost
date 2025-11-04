@@ -8,7 +8,7 @@ import * as scriptManager from './scriptManager';
 import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButtonTreeItem } from './treeProvider';
 import { CustomDialog } from '../customDialog';
 import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
-import { showNoWorkspaceError, getCurrentWorkspaceFolder, getCurrentWorkspacePath } from '../utilities/workspaceUtils';
+import { showNoWorkspaceError, getCurrentWorkspaceFolder, getCurrentWorkspacePath, fileExists, readFileContent, writeFileContent } from '../utilities/workspaceUtils';
 
 // Create AI-suggested buttons based on activity log
 export async function createAIButtons( activityLogPath: string | undefined, buttonsProvider: SmartCmdButtonsTreeProvider) {
@@ -24,9 +24,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 
 	try {
 		// Check if activity log file exists
-		try {
-			await fs.access(activityLogPath);
-		} catch (error) {
+		if (!(await fileExists(activityLogPath))) {
 			// File doesn't exist
 			vscode.window.showInformationMessage(
 				'No activity log found yet. DevBoost tracks your terminal commands and file operations. ' +
@@ -41,7 +39,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 		}
 
 		// Read activity log
-		const logContent = await fs.readFile(activityLogPath, 'utf-8');
+		const logContent = await readFileContent(activityLogPath);
 		
 		if (!logContent || logContent.trim().length === 0) {
 			vscode.window.showInformationMessage(
@@ -295,11 +293,8 @@ async function createCustomButtonInternal(
 	}
 
 	try {
-		// Ensure the directory exists
-		await fs.mkdir(path.dirname(promptInputPath), { recursive: true });
-
-		// Clean the prompt input file (keep it empty)
-		await fs.writeFile(promptInputPath, '');
+		// Clean the prompt input file (keep it empty) using utility
+		await writeFileContent(promptInputPath, '');
 
 		// Open the dedicated prompt input file
 		const doc = await vscode.workspace.openTextDocument(promptInputPath);
@@ -339,8 +334,8 @@ Example: "Button to add changes and commit code using git"`,
 					// Read content from the document
 					const content = doc.getText().trim();
 					
-					// Clean the file after reading
-					fs.writeFile(promptInputPath!, '').catch(error => {
+					// Clean the file after reading using utility
+					writeFileContent(promptInputPath!, '').catch(error => {
 						console.error('Error cleaning prompt file:', error);
 					});
 					
@@ -582,13 +577,10 @@ export async function openButtonsFile(item: any, globalButtonsPath: string | und
 			}
 			filePath = globalButtonsPath;
 			
-			// Ensure the file exists
-			try {
-				await fs.access(filePath);
-			} catch {
+			// Ensure the file exists using utility
+			if (!(await fileExists(filePath))) {
 				// Create the file if it doesn't exist
-				await fs.mkdir(path.dirname(filePath), { recursive: true });
-				await fs.writeFile(filePath, '[]');
+				await writeFileContent(filePath, '[]');
 			}
 		} else {
 			// Open workspace buttons file
@@ -600,13 +592,10 @@ export async function openButtonsFile(item: any, globalButtonsPath: string | und
 			const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
 			filePath = path.join(workspaceRoot, '.vscode', 'devboost.json');
 			
-			// Ensure the file exists
-			try {
-				await fs.access(filePath);
-			} catch {
+			// Ensure the file exists using utility
+			if (!(await fileExists(filePath))) {
 				// Create the file if it doesn't exist
-				await fs.mkdir(path.dirname(filePath), { recursive: true });
-				await fs.writeFile(filePath, '[]');
+				await writeFileContent(filePath, '[]');
 			}
 		}
 		

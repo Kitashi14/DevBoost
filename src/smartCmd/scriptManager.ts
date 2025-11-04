@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { smartCmdButton, InputField } from './treeProvider';
-import { getCurrentWorkspacePath, getScriptExtension, sanitizeFileName, generateUniqueFileName } from '../utilities/workspaceUtils';
+import { getCurrentWorkspacePath, getScriptExtension, sanitizeFileName, generateUniqueFileName, writeFileContent } from '../utilities/workspaceUtils';
 
 /**
  * Get the scripts directory path based on scope
@@ -47,13 +47,14 @@ export async function saveScript(
 	}
 	
 	try {
-		// Ensure scripts directory exists
-		await fs.mkdir(scriptsDir, { recursive: true });
-		
+		// Ensure scripts directory exists and write script content using utility
 		const scriptPath = path.join(scriptsDir, scriptFileName);
 		
-		// Write script content
-		await fs.writeFile(scriptPath, scriptContent, { encoding: 'utf-8' });
+		// Write script content using utility (handles directory creation)
+		const success = await writeFileContent(scriptPath, scriptContent);
+		if (!success) {
+			throw new Error('Failed to write script file');
+		}
 		
 		// Make script executable on Unix-like systems
 		if (process.platform !== 'win32') {

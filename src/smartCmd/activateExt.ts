@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as handlers from './handlers';
 import * as scriptManager from './scriptManager';
 import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton } from './treeProvider';
+import { fileExists, writeFileContent } from '../utilities/workspaceUtils';
 
 export async function activateSmartCmd(
 	context: vscode.ExtensionContext,
@@ -15,18 +16,11 @@ export async function activateSmartCmd(
 	// Initialize SmartCmd paths
 	const globalButtonsPath = path.join(globalStoragePath, 'global-buttons.json');
 
-	// Ensure global buttons file exists
-	try {
-		await fs.mkdir(path.dirname(globalButtonsPath), { recursive: true });
-		try {
-			await fs.access(globalButtonsPath);
-		} catch {
-			// File doesn't exist, create it with empty array
-			await fs.writeFile(globalButtonsPath, '[]');
-			console.log('DevBoost: Initialized global buttons file');
-		}
-	} catch (error) {
-		console.error('DevBoost: Error initializing global buttons file:', error);
+	// Ensure global buttons file exists using utility
+	if (!(await fileExists(globalButtonsPath))) {
+		// File doesn't exist, create it with empty array
+		await writeFileContent(globalButtonsPath, '[]');
+		console.log('DevBoost: Initialized global buttons file');
 	}
 
 	// Create and register the tree view provider for SmartCmd
@@ -51,7 +45,7 @@ export async function activateSmartCmd(
 	const createCustomButtonDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateCustomButton', async (sectionObj: any) => {
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
-			if(sectionObj.section == 'global'){ 
+			if(sectionObj.section === 'global'){ 
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Global');
 			}
 			else {

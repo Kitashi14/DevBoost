@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import * as aiServices from './aiServices';
 import { copyToClipboard, readFromClipboard, copyWithPreview } from '../utilities/clipboardUtils';
+import { createWebviewPanel, setupWebviewMessageHandler, showWebviewLoading, showWebviewError } from '../utilities/webviewUtils';
 
 /**
  * Show the prompt enhancement interface
@@ -9,38 +10,31 @@ import { copyToClipboard, readFromClipboard, copyWithPreview } from '../utilitie
 export async function showPromptEnhancer(): Promise<void> {
 	try {
 		// Create and show the prompt enhancer webview
-		const panel = vscode.window.createWebviewPanel(
-			'promptEnhancer',
-			'Prompt Enhancer',
-			vscode.ViewColumn.One,
-			{
-				enableScripts: true,
-				retainContextWhenHidden: true
-			}
-		);
+		const panel = createWebviewPanel({
+			viewType: 'promptEnhancer',
+			title: 'Prompt Enhancer',
+			enableScripts: true,
+			retainContextWhenHidden: true
+		});
 
 		// Set the HTML content for the webview
 		panel.webview.html = getPromptEnhancerHtml();
 
 		// Handle messages from the webview
-		panel.webview.onDidReceiveMessage(
-			async (message) => {
-				switch (message.command) {
-					case 'analyzePrompt':
-						await handleAnalyzePrompt(panel, message.prompt);
-						break;
-					case 'applyEnhancements':
-						await handleApplyEnhancements(panel, message.originalPrompt, message.selectedSuggestions);
-						break;
-					case 'generateFromIntent':
-						await handleGenerateFromIntent(panel, message.intent, message.domain);
-						break;
-					case 'copyToClipboard':
-						await copyToClipboard(message.text);
-						break;
-				}
+		setupWebviewMessageHandler(panel, {
+			'analyzePrompt': async (message) => {
+				await handleAnalyzePrompt(panel, message.prompt);
+			},
+			'applyEnhancements': async (message) => {
+				await handleApplyEnhancements(panel, message.originalPrompt, message.selectedSuggestions);
+			},
+			'generateFromIntent': async (message) => {
+				await handleGenerateFromIntent(panel, message.intent, message.domain);
+			},
+			'copyToClipboard': async (message) => {
+				await copyToClipboard(message.text);
 			}
-		);
+		});
 
 	} catch (error) {
 		console.error('Error showing prompt enhancer:', error);
@@ -53,15 +47,12 @@ export async function showPromptEnhancer(): Promise<void> {
  */
 export async function enhancePromptFromInput(originalPrompt: string): Promise<string | null> {
 	try {
-		const panel = vscode.window.createWebviewPanel(
-			'promptEnhancerInput',
-			'Enhance Prompt',
-			vscode.ViewColumn.One,
-			{
-				enableScripts: true,
-				retainContextWhenHidden: true
-			}
-		);
+		const panel = createWebviewPanel({
+			viewType: 'promptEnhancerInput',
+			title: 'Enhance Prompt',
+			enableScripts: true,
+			retainContextWhenHidden: true
+		});
 
 		panel.webview.html = getPromptEnhancerHtml();
 
@@ -177,10 +168,7 @@ export async function quickEnhanceFromClipboard(): Promise<void> {
  */
 async function handleAnalyzePrompt(panel: vscode.WebviewPanel, prompt: string): Promise<void> {
 	try {
-		panel.webview.postMessage({
-			command: 'showLoading',
-			message: 'Analyzing prompt...'
-		});
+		showWebviewLoading(panel, 'Analyzing prompt...');
 
 		const suggestions = await aiServices.getPromptEnhancementSuggestions(prompt);
 
@@ -191,10 +179,7 @@ async function handleAnalyzePrompt(panel: vscode.WebviewPanel, prompt: string): 
 
 	} catch (error) {
 		console.error('Error analyzing prompt:', error);
-		panel.webview.postMessage({
-			command: 'showError',
-			message: 'Failed to analyze prompt. Please try again.'
-		});
+		showWebviewError(panel, 'Failed to analyze prompt. Please try again.');
 	}
 }
 
@@ -207,10 +192,7 @@ async function handleApplyEnhancements(
 	selectedSuggestions: any[]
 ): Promise<string | null> {
 	try {
-		panel.webview.postMessage({
-			command: 'showLoading',
-			message: 'Applying enhancements...'
-		});
+		showWebviewLoading(panel, 'Applying enhancements...');
 
 		const enhancedPrompt = await aiServices.applyEnhancements(originalPrompt, selectedSuggestions);
 
@@ -224,10 +206,7 @@ async function handleApplyEnhancements(
 
 	} catch (error) {
 		console.error('Error applying enhancements:', error);
-		panel.webview.postMessage({
-			command: 'showError',
-			message: 'Failed to apply enhancements. Please try again.'
-		});
+		showWebviewError(panel, 'Failed to apply enhancements. Please try again.');
 		return null;
 	}
 }
@@ -241,10 +220,7 @@ async function handleGenerateFromIntent(
 	domain?: string
 ): Promise<string | null> {
 	try {
-		panel.webview.postMessage({
-			command: 'showLoading',
-			message: 'Generating prompt...'
-		});
+		showWebviewLoading(panel, 'Generating prompt...');
 
 		const generatedPrompt = await aiServices.generatePromptFromIntent(intent, domain);
 
@@ -257,10 +233,7 @@ async function handleGenerateFromIntent(
 
 	} catch (error) {
 		console.error('Error generating prompt:', error);
-		panel.webview.postMessage({
-			command: 'showError',
-			message: 'Failed to generate prompt. Please try again.'
-		});
+		showWebviewError(panel, 'Failed to generate prompt. Please try again.');
 		return null;
 	}
 }

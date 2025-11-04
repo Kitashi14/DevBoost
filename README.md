@@ -197,6 +197,7 @@ src/
 DevBoost v0.2.0 introduces a comprehensive utilities system that eliminates code duplication and improves maintainability:
 
 **Core Benefits:**
+
 - ✅ **Reduced Duplication**: Eliminated ~100+ lines of duplicated code
 - ✅ **Improved Maintainability**: Single source of truth for common operations
 - ✅ **Enhanced UX**: Better user feedback and error handling
@@ -211,6 +212,7 @@ DevBoost v0.2.0 introduces a comprehensive utilities system that eliminates code
 - **`webviewUtils.ts`**: Standardized webview creation, messaging, and interaction patterns
 
 **Example Usage:**
+
 ```typescript
 import { getFirstCopilotModel, sendAIRequest, copyWithPreview } from '../utilities';
 

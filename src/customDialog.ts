@@ -1,5 +1,6 @@
 // Custom Dialog Module - Scrollable webview-based dialogs to replace modal showInformationMessage
 import * as vscode from 'vscode';
+import { createWebviewPanel } from './utilities/webviewUtils';
 
 export interface DialogButton {
 	label: string;
@@ -30,15 +31,12 @@ export class CustomDialog {
 			}
 
 			// Create webview panel
-			CustomDialog.currentPanel = vscode.window.createWebviewPanel(
-				'customDialog',
-				options.title,
-				vscode.ViewColumn.One,
-				{
-					enableScripts: true,
-					retainContextWhenHidden: false
-				}
-			);
+			CustomDialog.currentPanel = createWebviewPanel({
+				viewType: 'customDialog',
+				title: options.title,
+				enableScripts: true,
+				retainContextWhenHidden: false
+			});
 
 			// Set HTML content
 			CustomDialog.currentPanel.webview.html = CustomDialog.getHtmlContent(options);
