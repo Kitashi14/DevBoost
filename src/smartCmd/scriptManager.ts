@@ -3,16 +3,17 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { smartCmdButton, InputField } from './treeProvider';
+import { getCurrentWorkspacePath, getScriptExtension, sanitizeFileName, generateUniqueFileName } from '../utilities/workspaceUtils';
 
 /**
  * Get the scripts directory path based on scope
  */
 export function getScriptsDir(scope: 'workspace' | 'global', globalStoragePath?: string): string | null {
 	if (scope === 'workspace') {
-		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+		const workspaceRoot = getCurrentWorkspacePath();
+		if (!workspaceRoot) {
 			return null;
 		}
-		const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
 		return path.join(workspaceRoot, '.vscode', 'scripts');
 	} else {
 		if (!globalStoragePath) {
@@ -26,30 +27,8 @@ export function getScriptsDir(scope: 'workspace' | 'global', globalStoragePath?:
  * Generate a unique script filename from button name
  */
 export function generateScriptFileName(buttonName: string, existingFiles: string[] = []): string {
-	// Sanitize button name for filename
-	let baseName = buttonName
-		.replace(/[^\w\s-]/g, '') // Remove special chars except word chars, spaces, hyphens
-		.replace(/\s+/g, '_')      // Replace spaces with underscores
-		.toLowerCase();
-	
-	if (!baseName || baseName.length === 0) {
-		baseName = 'script';
-	}
-	
-	// Determine shell extension based on OS
-	const isWindows = process.platform === 'win32';
-	const extension = isWindows ? '.bat' : '.sh';
-	
-	let filename = `${baseName}${extension}`;
-	let counter = 1;
-	
-	// Ensure uniqueness
-	while (existingFiles.includes(filename)) {
-		filename = `${baseName}_${counter}${extension}`;
-		counter++;
-	}
-	
-	return filename;
+	const extension = getScriptExtension();
+	return generateUniqueFileName(buttonName, extension, existingFiles);
 }
 
 /**

@@ -8,12 +8,12 @@ import * as scriptManager from './scriptManager';
 import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButtonTreeItem } from './treeProvider';
 import { CustomDialog } from '../customDialog';
 import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
+import { showNoWorkspaceError, getCurrentWorkspaceFolder, getCurrentWorkspacePath } from '../utilities/workspaceUtils';
 
 // Create AI-suggested buttons based on activity log
 export async function createAIButtons( activityLogPath: string | undefined, buttonsProvider: SmartCmdButtonsTreeProvider) {
 	// Check if workspace is open
-	if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
-		vscode.window.showErrorMessage('Please open a workspace to use SmartCmd.');
+	if (showNoWorkspaceError('SmartCmd')) {
 		return;
 	}
 
@@ -525,9 +525,8 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 		
 		// Replace <workspace> keyword with actual workspace path
 		if (execDir.includes('<workspace>')) {
-			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-			if (workspaceFolder) {
-				const workspacePath = workspaceFolder.uri.fsPath;
+			const workspacePath = getCurrentWorkspacePath();
+			if (workspacePath) {
 				execDir = execDir.replace(/<workspace>/g, workspacePath);
 			} else {
 				vscode.window.showWarningMessage('No workspace folder open. Cannot resolve <workspace> path.');

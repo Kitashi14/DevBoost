@@ -1,6 +1,7 @@
 // Prompt Enhancer Handlers - All prompt enhancement related commands
 import * as vscode from 'vscode';
 import * as aiServices from './aiServices';
+import { copyToClipboard, readFromClipboard, copyWithPreview } from '../utilities/clipboardUtils';
 
 /**
  * Show the prompt enhancement interface
@@ -35,8 +36,7 @@ export async function showPromptEnhancer(): Promise<void> {
 						await handleGenerateFromIntent(panel, message.intent, message.domain);
 						break;
 					case 'copyToClipboard':
-						await vscode.env.clipboard.writeText(message.text);
-						vscode.window.showInformationMessage('Copied to clipboard!');
+						await copyToClipboard(message.text);
 						break;
 				}
 			}
@@ -120,7 +120,7 @@ export async function enhancePromptFromInput(originalPrompt: string): Promise<st
 export async function quickEnhanceFromClipboard(): Promise<void> {
 	try {
 		// Get text from clipboard
-		const clipboardText = await vscode.env.clipboard.readText();
+		const clipboardText = await readFromClipboard();
 		
 		if (!clipboardText || clipboardText.trim().length === 0) {
 			vscode.window.showInformationMessage('Clipboard is empty. Copy a prompt first.');
@@ -141,21 +141,20 @@ export async function quickEnhanceFromClipboard(): Promise<void> {
 		});
 
 		if (result) {
-			// Copy enhanced prompt back to clipboard
-			await vscode.env.clipboard.writeText(result);
-			
-			// Show a quick notification with preview
-			const previewLength = 100;
-			const preview = result.length > previewLength 
-				? result.substring(0, previewLength) + '...' 
-				: result;
-			
-			const action = await vscode.window.showInformationMessage(
-				`✨ Prompt enhanced and copied to clipboard!\n\nPreview: "${preview}"`,
-				'Show Full Result'
+			// Copy enhanced prompt back to clipboard with preview
+			await copyWithPreview(
+				result, 
+				100,
+				'✨ Prompt enhanced and copied to clipboard!'
 			);
 			
-			if (action === 'Show Full Result') {
+			// Optional: Show comparison document
+			const action = await vscode.window.showInformationMessage(
+				'Would you like to see the before and after comparison?',
+				'Show Comparison'
+			);
+			
+			if (action === 'Show Comparison') {
 				// Open a simple text document with the result
 				const doc = await vscode.workspace.openTextDocument({
 					content: `Original Prompt:\n${clipboardText}\n\n---\n\nEnhanced Prompt:\n${result}`,
