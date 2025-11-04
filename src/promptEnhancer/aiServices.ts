@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { logPromptToFile } from '../utilities/aiLogger';
+import { logPromptEnhancerPrompt } from '../utilities/aiLogger';
 import { getFirstCopilotModel, sendAIRequest, createUserMessage } from '../utilities/aiModelUtils';
 
 export interface EnhancementSuggestion {
@@ -67,11 +67,11 @@ RESPOND WITH JSON ARRAY ONLY:
 				const filteredSuggestions = suggestions.filter(s => s.type && s.suggestion && s.priority);
 				
 				// Log the AI interaction
-				await logPromptToFile('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
+				await logPromptEnhancerPrompt('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
 					originalPrompt: prompt,
 					suggestionsCount: filteredSuggestions.length,
 					rawResponseLength: fullResponse.length
-				}, 'ai_prompts_enhancer.log');
+				});
 				
 				return filteredSuggestions;
 			}
@@ -79,7 +79,7 @@ RESPOND WITH JSON ARRAY ONLY:
 			console.error('Error parsing enhancement suggestions:', parseError);
 			
 			// Log the failed AI interaction
-			await logPromptToFile('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
+			await logPromptEnhancerPrompt('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
 				originalPrompt: prompt,
 				error: 'Parse error',
 				parseError: parseError instanceof Error ? parseError.message : String(parseError)
@@ -136,7 +136,7 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 		const finalResult = enhancedPrompt.trim() || originalPrompt;
 		
 		// Log the AI interaction
-		await logPromptToFile('applyEnhancements', applyPrompt, enhancedPrompt, {
+		await logPromptEnhancerPrompt('applyEnhancements', applyPrompt, enhancedPrompt, {
 			originalPrompt,
 			selectedSuggestions,
 			enhancementDetails,
@@ -149,7 +149,7 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 		console.error('Error applying enhancements:', error);
 		
 		// Log the failed AI interaction
-		await logPromptToFile('applyEnhancements', 'N/A - Error occurred', 'N/A - Error occurred', {
+		await logPromptEnhancerPrompt('applyEnhancements', 'N/A - Error occurred', 'N/A - Error occurred', {
 			originalPrompt,
 			selectedSuggestions,
 			error: error instanceof Error ? error.message : String(error),
@@ -200,7 +200,7 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 		const finalResult = generatedPrompt.trim() || intent;
 		
 		// Log the AI interaction
-		await logPromptToFile('generatePromptFromIntent', generationPrompt, generatedPrompt, {
+		await logPromptEnhancerPrompt('generatePromptFromIntent', generationPrompt, generatedPrompt, {
 			userIntent: intent,
 			domain,
 			domainContext,
@@ -213,7 +213,7 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 		console.error('Error generating prompt from intent:', error);
 		
 		// Log the failed AI interaction
-		await logPromptToFile('generatePromptFromIntent', 'N/A - Error occurred', 'N/A - Error occurred', {
+		await logPromptEnhancerPrompt('generatePromptFromIntent', 'N/A - Error occurred', 'N/A - Error occurred', {
 			userIntent: intent,
 			domain,
 			error: error instanceof Error ? error.message : String(error),
@@ -264,7 +264,7 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO EXPLANATION:`;
 		const finalResult = enhancedPrompt.trim() || originalPrompt;
 		
 		// Log the AI interaction
-		await logPromptToFile('quickEnhancePrompt', quickEnhancePrompt, enhancedPrompt, {
+		await logPromptEnhancerPrompt('quickEnhancePrompt', quickEnhancePrompt, enhancedPrompt, {
 			originalPrompt,
 			enhancedPromptLength: finalResult.length,
 			wasEnhanced: finalResult !== originalPrompt
@@ -275,7 +275,7 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO EXPLANATION:`;
 		console.error('Error in quick enhance:', error);
 		
 		// Log the failed AI interaction
-		await logPromptToFile('quickEnhancePrompt', 'N/A - Error occurred', 'N/A - Error occurred', {
+		await logPromptEnhancerPrompt('quickEnhancePrompt', 'N/A - Error occurred', 'N/A - Error occurred', {
 			originalPrompt,
 			error: error instanceof Error ? error.message : String(error),
 			returnedNull: true

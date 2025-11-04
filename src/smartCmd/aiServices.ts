@@ -4,7 +4,7 @@ import { smartCmdButton } from './treeProvider';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { exec } from 'child_process';
-import { logPromptToFile } from '../utilities/aiLogger';
+import { logSmartCmdPrompt } from '../utilities/aiLogger';
 import { getFirstCopilotModel, sendAIRequest, createUserMessage } from '../utilities/aiModelUtils';
 import { getPlatformInfo } from '../utilities/workspaceUtils';
 
@@ -107,11 +107,11 @@ If it's unique, respond with only "UNIQUE".`;
 		const fullResponse = await sendAIRequest(model, messages);
 
 		// Log prompt for development
-		await logPromptToFile('checkDuplicateButton', prompt, fullResponse, {
+		await logSmartCmdPrompt('checkDuplicateButton', prompt, fullResponse, {
 			newButton: { name: newButton.name, execDir: newButton.execDir, cmd: newButton.cmd },
 			targetScope,
 			existingButtonsCount: buttonsToCheck.length
-		}, 'ai_prompts_smartcmd.log');
+		});
 
 		console.log('AI duplicate detection response:', fullResponse);
 		const answer = fullResponse.trim();
@@ -229,7 +229,7 @@ SAFE
 		}
 
 		// Log prompt for development
-		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
+		await logSmartCmdPrompt('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
 			button: { name: button.name, execDir: button.execDir, cmd: button.cmd },
 			currentScope: button.scope
 		});
@@ -494,7 +494,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 			fullResponse += part;
 		}
 
-		await logPromptToFile('getAISuggestions', prompt, fullResponse, {
+		await logSmartCmdPrompt('getAISuggestions', prompt, fullResponse, {
 			platform,
 			shell,
 			recentLogsCount: optimizedLog.recentLogs.length,
@@ -689,7 +689,7 @@ Only respond with the JSON object, no additional text.`;
 		}
 
 		// Log prompt for development
-		await logPromptToFile('getCustomButtonSuggestion', prompt, fullResponse, {
+		await logSmartCmdPrompt('getCustomButtonSuggestion', prompt, fullResponse, {
 			description,
 			scope,
 			platform,

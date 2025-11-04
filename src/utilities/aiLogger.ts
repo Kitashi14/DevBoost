@@ -13,8 +13,8 @@ export async function logPromptToFile(
 	functionName: string, 
 	prompt: string, 
 	response: string, 
+	logFileName: string,
 	metadata?: any,
-	logFileName: string = 'ai_prompts.log'
 ): Promise<void> {
 	if (!ENABLE_PROMPT_LOGGING) {
 		return;
@@ -74,4 +74,28 @@ export function setPromptLoggingEnabled(enabled: boolean): void {
  */
 export function isPromptLoggingEnabled(): boolean {
 	return ENABLE_PROMPT_LOGGING;
+}
+
+/**
+ * Log AI prompts specifically for SmartCmd module
+ */
+export async function logSmartCmdPrompt(
+	functionName: string,
+	prompt: string,
+	response: string,
+	metadata?: any
+): Promise<void> {
+	return logPromptToFile(functionName, prompt, response, 'ai_prompts_smartcmd.log', metadata);
+}
+
+/**
+ * Log AI prompts specifically for PromptEnhancer module
+ */
+export async function logPromptEnhancerPrompt(
+	functionName: string,
+	prompt: string,
+	response: string,
+	metadata?: any
+): Promise<void> {
+	return logPromptToFile(functionName, prompt, response, 'ai_prompts_enhancer.log', metadata);
 }
