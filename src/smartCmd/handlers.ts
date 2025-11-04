@@ -96,7 +96,7 @@ ${buttons.map((btn, i) => {
 		const scriptPreview = btn.scriptContent.length > 100 
 			? btn.scriptContent.substring(0, 100) + '...' 
 			: btn.scriptContent;
-		cmdDisplay = `Script:\n${scriptPreview.split('\\n').join('\n   ')}`;
+		cmdDisplay = `Cmd: cd ${btn.execDir && btn.execDir.trim() !== '' ? btn.execDir : '.'} && run_script\nScript:\n${scriptPreview.split('\\n').join('\n   ')}`;
 	} else {
 		// Regular command button
 		cmdDisplay = `Cmd: ${btn.execDir && btn.execDir.trim() !== '.' && btn.execDir.trim() !== '' ? 'cd ' + btn.execDir + ' && ' : ''}${btn.cmd}`;
@@ -132,7 +132,7 @@ Do you want to create these buttons?`;
 				if (button.scriptContent) {
 					// Script button - show script content
 					const scriptPreview = button.scriptContent.split('\\n').join('\n');
-					cmdDisplay = `Script:\n${scriptPreview}`;
+					cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${scriptPreview.split('\\n').join('\n   ')}`;
 				} else {
 					// Regular command button
 					cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? 'cd ' + button.execDir + ' && ' : ''}${button.cmd}`;
@@ -375,7 +375,7 @@ Example: "Button to add changes and commit code using git"`,
 			if (button.scriptContent) {
 				// Script button - show script content
 				const scriptPreview = button.scriptContent.split('\\n').join('\n');
-				cmdDisplay = `Script:\n${scriptPreview}`;
+				cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${scriptPreview.split('\\n').join('\n   ')}`;
 			} else {
 				// Regular command button
 				cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}`;
@@ -503,7 +503,21 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 	// Prepend execution directory if specified
 	// This applies to both script and command buttons
 	if (button.execDir && button.execDir.trim().length > 0 && button.execDir.trim() !== '.') {
-		finalCommand = `cd ${button.execDir.trim()} && ${finalCommand}`;
+		let execDir = button.execDir.trim();
+		
+		// Replace <workspace> keyword with actual workspace path
+		if (execDir.includes('<workspace>')) {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+			if (workspaceFolder) {
+				const workspacePath = workspaceFolder.uri.fsPath;
+				execDir = execDir.replace(/<workspace>/g, workspacePath);
+			} else {
+				vscode.window.showWarningMessage('No workspace folder open. Cannot resolve <workspace> path.');
+				return;
+			}
+		}
+		
+		finalCommand = `cd ${execDir} && ${finalCommand}`;
 	}
 	// Check if it's a single-word (eg. VS Code command, no spaces or chaining)
 	if (!finalCommand.includes(' ') && !finalCommand.includes('&&') && !finalCommand.includes('||') && !finalCommand.includes(';')) {
@@ -615,6 +629,7 @@ export async function addToGlobal(item: SmartCmdButtonTreeItem, buttonsProvider:
 
 Button Details:
 • Name: ${item.button.name}
+• Exec Dir: ${item.button.execDir}
 • Command: ${item.button.cmd}
 • Description: ${item.button.ai_description || item.button.user_description || 'N/A'}
 ${item.button.inputs ? `• Inputs: ${item.button.inputs.map((i: any) => i.placeholder).join(', ')}` : ''}
@@ -659,7 +674,7 @@ Do you want to add it to global scope anyway?`;
 			// Create button with scriptContent so it will be processed and saved in global scripts
 			globalButton = {
 				name: item.button.name,
-				execDir: '.', // Reset execDir for global button
+				execDir: item.button.execDir, // Reset execDir for global button
 				cmd: '', // Will be set by processButtonWithScript
 				scriptContent: scriptContent, // Temporary field for processing
 				scriptFile: item.button.scriptFile, // Keep same filename if possible
@@ -678,7 +693,7 @@ Do you want to add it to global scope anyway?`;
 		// Regular command button - no script to copy
 		globalButton = {
 			name: item.button.name,
-			execDir: '.', // Reset execDir for global button
+			execDir: item.button.execDir, // Reset execDir for global button
 			cmd: item.button.cmd,
 			user_description: item.button.user_description,
 			ai_description: item.button.ai_description,

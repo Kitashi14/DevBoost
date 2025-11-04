@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { smartCmdButton } from './treeProvider';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { exec } from 'child_process';
 
 // Development mode flag - set to false in production
 const ENABLE_PROMPT_LOGGING = true;
@@ -258,6 +259,7 @@ export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise
 
 Button Details:
 - Name: "${button.name}"
+- Exec Dir: "${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'}"
 - Command: "${button.cmd}"
 - User Description: "${button.user_description || 'N/A'}"
 - AI Description: "${button.ai_description || 'N/A'}"
@@ -274,10 +276,12 @@ A button is WORKSPACE-SPECIFIC if it:
 A button is GLOBAL-SAFE if it:
 1. Uses generic commands that work anywhere (e.g., git status, npm install, npm test, ls, cd)
 2. Uses ABSOLUTE paths to system-wide tools (e.g., /usr/local/bin/deploy-script.sh, C:\\Tools\\build.exe)
-3. Uses VS Code built-in commands (e.g., workbench.action.files.save)
-4. Runs standard tooling commands available globally (e.g., prettier, eslint, tsc, docker)
-5. General utility commands that don't depend on project structure
-6. System-level scripts or applications with absolute paths that exist across projects
+3. Uses <workspace> as a placeholder for the workspace directory
+4. Uses current directory (.) or home directory (~) as path references
+5. Uses VS Code built-in commands (e.g., workbench.action.files.save)
+6. Runs standard tooling commands available globally (e.g., prettier, eslint, tsc, docker)
+7. General utility commands that don't depend on project structure
+8. System-level scripts or applications with absolute paths that exist across projects
 
 IMPORTANT: Absolute paths to system tools are SAFE (they're global). Relative paths to workspace files are UNSAFE (they're workspace-specific).
 
@@ -301,7 +305,7 @@ SAFE
 
 		// Log prompt for development
 		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
-			button: { name: button.name, cmd: button.cmd },
+			button: { name: button.name, execDir: button.execDir, cmd: button.cmd },
 			currentScope: button.scope
 		});
 
@@ -358,12 +362,31 @@ export async function getAISuggestions(
 
 		const model = models[0];
 		const { platform, shell } = getSystemInfo();
+		let workspaceName = 'N/A';
+		let workspacePath = 'N/A';
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (workspaceFolder) {
+			workspaceName = workspaceFolder.name;
+			workspacePath = workspaceFolder.uri.fsPath;
+		}
+
 	
 	const prompt = 
 	`You are an elite DevOps automation expert creating intelligent command buttons for a developer's specific workflow.
 
 🖥️  SYSTEM ENVIRONMENT:
 - OS: ${platform} | Shell: ${shell}
+
+WORKSPACE CONTEXT:
+- Workspace Name: ${workspaceName}
+- Workspace Path: ${workspacePath}
+- Button Scope: Workspace-specific (will only be available in this project)
+
+IMPORTANT: For workspace buttons, use <workspace> keyword in execDir to make buttons portable:
+- Use "<workspace>" to refer to the workspace root directory
+- Use "<workspace>/frontend" for workspace subdirectories
+- This makes buttons work across different machines and workspace locations
+- Example: "execDir": "<workspace>/backend" instead of "/absolute/path/to/backend"
 
 📊 STATISTICAL OVERVIEW:
 ${optimizedLog.summary}
@@ -411,8 +434,9 @@ SIMPLE COMMAND CHAIN:
 
 • If you see frequent directory changes before commands
   Create: 
-  	execDir: "[detected-dir]",
+  	execDir: "<workspace>/[subdirectory]" or "<workspace>",
   	cmd: "[command]"
+  Use <workspace> keyword to make it portable across different machines
 
 • If command needs user input, use {variableName} placeholders:
   Command: "docker exec -it {container} bash"
@@ -446,8 +470,8 @@ Provide:
 SIMPLE COMMAND CHAIN FORMAT:
 [
     {
-		"name": "🚀 Build and Deploy",
-		"execDir": "/path/to/start",
+        "name": "🚀 Build and Deploy",
+        "execDir": "<workspace>/subdirectory",
         "cmd": "npm run build && npm run deploy && cd /path/to/other && ./deploy.sh",
         "ai_description": "Automates the build and deploy workflow pattern"
     },
@@ -462,8 +486,8 @@ SIMPLE COMMAND CHAIN FORMAT:
 SCRIPT FORMAT (for complex workflows):
 [
     {
-        "name": "� Multi-Service Setup",
-        "execDir": "/path/to/workspace",
+        "name": "🚀 Multi-Service Setup",
+        "execDir": "<workspace>",
         "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
         "ai_description": "Sets up frontend, backend, and starts Docker services"
     }
@@ -473,7 +497,7 @@ WITH INPUT FIELDS - COMMAND FORMAT:
 [
     {
         "name": "📝 Git Commit & Push",
-        "execDir": "/path/to/workspace",
+        "execDir": "<workspace>",
         "cmd": "git add . && git commit -m '{message}' && git push",
         "ai_description": "Stages changes, commits with custom message, and pushes to remote",
         "inputs": [
@@ -485,7 +509,7 @@ WITH INPUT FIELDS - COMMAND FORMAT:
     },
     {
         "name": "🐳 Docker Execute",
-		"execDir": "/path/to/context",
+        "execDir": "<workspace>/path/to/context",
         "cmd": "docker exec -it {container} {command}",
         "ai_description": "Execute command inside a Docker container",
         "inputs": [
@@ -504,8 +528,8 @@ WITH INPUT FIELDS - COMMAND FORMAT:
 WITH INPUT FIELDS - SCRIPT FORMAT:
 [
     {
-        "name": "� Deploy to Environment",
-        "execDir": "/path/to/project",
+        "name": "🚀 Deploy to Environment",
+        "execDir": "<workspace>",
         "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi",
         "ai_description": "Builds project and deploys to specified environment with error checking",
         "inputs": [
@@ -521,7 +545,8 @@ WRONG FORMAT (DO NOT DO THIS):
 [
     {
         "name": "Build Project",	  ❌ Missing emoji in name
-		"execDir": "cd /path/to/project",  ❌ ExecDir should be just the path, no commands
+        "execDir": "cd /path/to/project",  ❌ ExecDir should be just the path, no commands
+        OR "execDir": "/absolute/path/to/workspace",  ❌ Use <workspace> instead of absolute paths
         "cmd": "cd project && make msim_main || echo '❌ Build failed'",  ❌ NO EMOJIS IN CMD!
         "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
     }
@@ -594,7 +619,6 @@ export async function getCustomButtonSuggestion(
 		
 		// Get workspace context if scope is workspace
 		let workspaceContext = '';
-		let workspaceSpecificExamples = '';
 		if (scope === 'workspace') {
 			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 			if (workspaceFolder) {
@@ -606,68 +630,13 @@ WORKSPACE CONTEXT:
 - Workspace Path: ${workspacePath}
 - Button Scope: Workspace-specific (will only be available in this project)
 
-IMPORTANT: Since this button is workspace-specific, you can:
-- Use relative paths if told in description (e.g., ./src, ./scripts, npm run custom-script)
-- Use absolute path of workspace (e.g., ${workspacePath}/scripts/deploy.sh)
+IMPORTANT: Since this button is workspace-specific, you can
+- Use <workspace> as a placeholder for the workspace path (e.g., <workspace>/scripts/deploy.sh, <workspace>/src, <workspace>/scripts)
+- Use current directory (.) or home directory (~) as path references when told in description
 - Use absolute paths of system-wide tools (e.g., /usr/local/bin/tool.sh, C:\\Tools\\build.exe)
 - Reference project-specific files and directories if provided (e.g., ./package.json, ./config)
 `;
 			}
-
-			workspaceSpecificExamples = `CORRECT FORMAT:
-WITHOUT INPUT FIELDS WITH ABSOLUTE execDir - COMMAND:
-{
-    "name": "🔨 Build Project",
-	"execDir": "/path/to/project",
-    "cmd": "npm run build",
-    "ai_description": "Builds the project using npm"
-}
-
-WITHOUT INPUT FIELDS WITH RELATIVE/CURRENT execDir - COMMAND:
-{
-	"name": "🚀 List all files in current directory",
-	"execDir": ".",
-	"cmd": "ls -la",
-	"ai_description": "Lists all files in the current directory"
-}
-
-WITH INPUT FIELDS - COMMAND:
-{
-    "name": "📝 Git Commit",
-	"execDir": "/path/to/repo",
-    "cmd": "git add . && git commit -m '{message}'",
-    "ai_description": "Stage all changes and commit with a custom message",
-    "inputs": [
-        {
-            "placeholder": "Enter commit message",
-            "variable": "{message}"
-        }
-    ]
-}
-COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
-{
-    "name": "🔧 Multi-Service Setup",
-    "execDir": "/path/to/workspace",
-    "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
-    "ai_description": "Sets up frontend, backend, and starts Docker services"
-}
-
-WITH INPUT FIELDS - SCRIPT:
-{
-    "name": "🚀 Deploy to Environment",
-    "execDir": "/path/to/project",
-    "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
-    "ai_description": "Builds and deploys to specified environment with error checking",
-    "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
-}
-
-WRONG FORMAT (DO NOT DO THIS):
-{
-    "name": "Build Project",  ❌ Missing emoji in name
-	"execDir": "cd /path/to/project",  ❌ ExecDir should be just the path, no commands
-    "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
-    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
-}`;
 		} else {
 			workspaceContext = `
 BUTTON SCOPE: Global (will be available across all projects)
@@ -677,57 +646,9 @@ IMPORTANT: Since this button is global, you should:
 - Use VS Code built-in commands (e.g., workbench.action.files.save)
 - Use only standard tooling commands available globally
 - Use absolute paths to system-wide tools if needed (e.g., /usr/local/bin/tool.sh, C:\\Tools\\build.exe)
+- Use relative paths ONLY if they refer to generic locations or when told in description using <workspace>
 - Do NOT assume any specific project structure
 `;
-
-			workspaceSpecificExamples = `CORRECT FORMAT:
-WITHOUT INPUT FIELDS WITH GENERIC EXECUTION PATH - COMMAND:
-{
-    "name": "🔨 Build Project",
-    "cmd": "npm run build",
-    "ai_description": "Builds the project using npm"
-}
-
-WITHOUT INPUT FIELDS WITH ANY POSSIBLE EXECUTION PATH - COMMAND:
-{
-	"name": "🚀 List all files in current directory",
-	"cmd": "ls -la",
-	"ai_description": "Lists all files in the current directory"
-}
-
-WITH INPUT FIELDS - COMMAND:
-{
-    "name": "📝 Git Commit",
-    "cmd": "git add . && git commit -m '{message}'",
-    "ai_description": "Stage all changes and commit with a custom message",
-    "inputs": [
-        {
-            "placeholder": "Enter commit message",
-            "variable": "{message}"
-        }
-    ]
-}
-COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
-{
-    "name": "🔧 Multi-Service Setup",
-    "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
-    "ai_description": "Sets up frontend, backend, and starts Docker services"
-}
-
-WITH INPUT FIELDS - SCRIPT:
-{
-    "name": "🚀 Deploy to Environment",
-    "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
-    "ai_description": "Builds and deploys to specified environment with error checking",
-    "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
-}
-
-WRONG FORMAT (DO NOT DO THIS):
-{
-    "name": "Build Project",  ❌ Missing emoji in name
-    "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
-    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
-}`;
 		}
 
 		
@@ -774,7 +695,60 @@ Provide:
 
 The user provided this description: "${description}" (this will be stored as user_description)
 
-${workspaceSpecificExamples}
+CORRECT FORMAT:
+WITHOUT INPUT FIELDS WITH GENERIC EXECUTION PATH - COMMAND:
+{
+    "name": "🔨 Build Project",
+    "execDir": "<workspace>",
+    "cmd": "npm run build",
+    "ai_description": "Builds the project using npm"
+}
+
+WITHOUT INPUT FIELDS WITH ANY POSSIBLE EXECUTION PATH - COMMAND:
+{
+    "name": "🚀 List all files in current directory",
+	"execDir": ".",
+    "cmd": "ls -la",
+    "ai_description": "Lists all files in the current directory"
+}
+
+WITH INPUT FIELDS - COMMAND:
+{
+    "name": "📝 Git Commit",
+	"execDir": "<workspace>",
+    "cmd": "git add . && git commit -m '{message}'",
+    "ai_description": "Stage all changes and commit with a custom message",
+    "inputs": [
+        {
+            "placeholder": "Enter commit message",
+            "variable": "{message}"
+        }
+    ]
+}
+COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
+{
+    "name": "🔧 Multi-Service Setup",
+	"execDir": "<workspace>",
+    "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
+    "ai_description": "Sets up frontend, backend, and starts Docker services"
+}
+
+WITH INPUT FIELDS - SCRIPT:
+{
+    "name": "🚀 Deploy to Environment",
+	"execDir": "<workspace>",
+    "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
+    "ai_description": "Builds and deploys to specified environment with error checking",
+    "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
+}
+
+WRONG FORMAT (DO NOT DO THIS):
+{
+    "name": "Build Project",  ❌ Missing emoji in name
+	"execDir": "cd /path",  ❌ ExecDir should be just the path, no commands
+    "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
+    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
+}
 
 Only respond with the JSON object, no additional text.`;
 
