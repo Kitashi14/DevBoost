@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as aiServices from './aiServices';
 import * as scriptManager from './scriptManager';
+import { CustomDialog } from '../customDialog';
 
 // Input field interface for commands that need user input
 export interface InputField {
@@ -288,9 +289,11 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			}
 		});
 
+		console.log(duplicateButtons)
 		// Show feedback about duplicates - ask for confirmation one by one
 		if (duplicateButtons.length > 0) {
 			for (const dup of duplicateButtons) {
+				console.log(dup)
 				const newButtonType = dup.newButton.scriptFile ? ' (script)' : '';
 				const existingButtonType = dup.existingButton.scriptFile ? ' (script)' : '';
 				
@@ -309,15 +312,19 @@ Existing Similar Button${existingButtonType}:
 • Scope: ${dup.existingButton.scope === 'global' ? 'Global' : 'Workspace'}
 
 What would you like to do?`;
-
-				const result = await vscode.window.showWarningMessage(
-					confirmationMessage,
-					{ modal: true },
-					'Add without editing',
-					'Edit New then Add',
-					'Edit Existing then Add',
-					'Replace Existing'
-				);
+				console.log(confirmationMessage);
+				const result = await CustomDialog.show({
+					title: '⚠️ Duplicate Button Detected',
+					message: confirmationMessage,
+					buttons: [
+						{ label: 'Add without editing', id: 'Add without editing', isPrimary: true },
+						{ label: 'Edit New then Add', id: 'Edit New then Add' },
+						{ label: 'Edit Existing then Add', id: 'Edit Existing then Add' },
+						{ label: 'Replace Existing', id: 'Replace Existing' },
+						{ label: 'Skip', id: 'Skip' }
+					],
+					markdown: false
+				});
 				
 				if (result === 'Add without editing') {
 					// Add the new button alongside the existing one
@@ -378,11 +385,18 @@ What would you like to do?`;
 					}
 					validButtons.push(dup.newButton);
 				} 
-				else {
+				else if (result === 'Skip') {
 					// Skip - delete the newly created script if any
 					if (dup.newButton.scriptFile) {
 						await scriptManager.deleteScript(dup.newButton.scriptFile, scope, this.globalStoragePath);
 					}
+				}
+				else {
+					// User closed dialog or unknown option - treat as Skip for every other duplicate
+					if (dup.newButton.scriptFile) {
+						await scriptManager.deleteScript(dup.newButton.scriptFile, scope, this.globalStoragePath);
+					}
+					break;
 				}
 			}
 		}

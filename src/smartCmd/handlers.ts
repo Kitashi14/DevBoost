@@ -5,7 +5,8 @@ import * as path from 'path';
 import * as aiServices from './aiServices';
 import * as activityLogging from '../activityLogging';
 import * as scriptManager from './scriptManager';
-import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton, InputField } from './treeProvider';
+import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButtonTreeItem } from './treeProvider';
+import { CustomDialog } from '../customDialog';
 import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
 
 // Create AI-suggested buttons based on activity log
@@ -96,7 +97,9 @@ ${buttons.map((btn, i) => {
 		const scriptPreview = btn.scriptContent.length > 100 
 			? btn.scriptContent.substring(0, 100) + '...' 
 			: btn.scriptContent;
-		cmdDisplay = `Cmd: cd ${btn.execDir && btn.execDir.trim() !== '' ? btn.execDir : '.'} && run_script\nScript:\n${scriptPreview.split('\\n').join('\n   ')}`;
+		// Add proper indentation to each line of the script
+		const indentedScript = scriptPreview.split('\n').map(line => '      ' + line).join('\n');
+		cmdDisplay = `Cmd: cd ${btn.execDir && btn.execDir.trim() !== '' ? btn.execDir : '.'} && run_script\n   Script:\n${indentedScript}`;
 	} else {
 		// Regular command button
 		cmdDisplay = `Cmd: ${btn.execDir && btn.execDir.trim() !== '.' && btn.execDir.trim() !== '' ? 'cd ' + btn.execDir + ' && ' : ''}${btn.cmd}`;
@@ -104,18 +107,21 @@ ${buttons.map((btn, i) => {
 	
 	return `${i + 1}. ${btn.name}
    ${cmdDisplay}
-   
-   - ${btn.ai_description}`;
+
+   AI Description: ${btn.ai_description}`;
 }).join('\n\n\n')}
 
 Do you want to create these buttons?`;
 
-		const choice = await vscode.window.showInformationMessage(
-			previewMessage,
-			{ modal: true },
-			'Create All',
-			'Review Individually'
-		);
+		const choice = await CustomDialog.show({
+			title: 'AI Button Suggestions',
+			message: previewMessage,
+			buttons: [
+				{ label: 'Create All', id: 'Create All', isPrimary: true },
+				{ label: 'Review Individually', id: 'Review Individually' }
+			],
+			markdown: false
+		});
 
 		if (!choice) {
 			vscode.window.showInformationMessage('Button creation cancelled.');
@@ -132,14 +138,17 @@ Do you want to create these buttons?`;
 				if (button.scriptContent) {
 					// Script button - show script content
 					const scriptPreview = button.scriptContent.split('\\n').join('\n');
-					cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${scriptPreview.split('\\n').join('\n   ')}`;
+					// Add proper indentation to each line of the script
+					const indentedScript = scriptPreview.split('\n').map(line => '   ' + line).join('\n');
+					cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${indentedScript}`;
 				} else {
 					// Regular command button
 					cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? 'cd ' + button.execDir + ' && ' : ''}${button.cmd}`;
 				}
 				
-				const buttonChoice = await vscode.window.showInformationMessage(
-`Review Button:
+				const buttonChoice = await CustomDialog.show({
+					title: 'Review Button',
+					message: `Review Button:
 
 Name: ${button.name}
 ${cmdDisplay}
@@ -147,10 +156,12 @@ ${cmdDisplay}
 AI description: ${button.ai_description}
 
 What would you like to do?`,
-					{ modal: true },
-					'Accept',
-					'Edit AI Description'
-				);
+					buttons: [
+						{ label: 'Accept', id: 'Accept', isPrimary: true },
+						{ label: 'Edit AI Description', id: 'Edit AI Description' }
+					],
+					markdown: false
+				});
 
 				if (buttonChoice === 'Accept') {
 					// Add button immediately for real-time duplicate detection
@@ -178,7 +189,9 @@ What would you like to do?`,
 					const addedCount = await buttonsProvider.addButtons([button], 'workspace');
 					acceptedCount += addedCount;
 				}
-				// Skip button if user doesn't select Accept or Edit
+				else {
+					return;
+				}
 			}
 
 			if (acceptedCount === 0) {
@@ -246,6 +259,33 @@ async function createCustomButtonInternal(
 
 	if (!scope || scope.trim().length === 0 || (scope !== 'Workspace' && scope !== 'Global')) {
 		vscode.window.showInformationMessage('Invalid scope selected. Please choose either "Workspace" or "Global".');
+		return;
+	}
+
+	// Get user input whether use AI or manual
+	const useAI = await vscode.window.showQuickPick(['Yes', 'No'], {
+		placeHolder: 'Use AI to generate the button?'
+	});
+
+	if (!useAI) {
+		return;
+	}
+
+	if (useAI === 'No') {
+		const button = await getManualButtonInput(scopeInput === 'Workspace' ? "workspace" : "global");
+
+		if (!button) {
+			vscode.window.showWarningMessage('Could not generate button. Please try again.');
+			return;
+		}
+
+		// Add button to tree view
+		const scopeType = scope === 'Global' ? 'global' : 'workspace';
+		const addedCount = await buttonsProvider.addButtons([button], scopeType);
+
+		if (addedCount > 0) {
+			vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
+		}
 		return;
 	}
 
@@ -329,33 +369,6 @@ Example: "Button to add changes and commit code using git"`,
 			return;
 		}
 
-		// Get user input whether use AI or manual
-		const useAI = await vscode.window.showQuickPick(['Yes', 'No'], {
-			placeHolder: 'Use AI to generate the button?'
-		});
-
-		if (!useAI) {
-			return;
-		}
-
-		if (useAI === 'No') {
-			const button = await getManualButtonInput(description);
-
-			if (!button) {
-				vscode.window.showWarningMessage('Could not generate button. Please try again.');
-				return;
-			}
-
-			// Add button to tree view
-			const scopeType = scope === 'Global' ? 'global' : 'workspace';
-			const addedCount = await buttonsProvider.addButtons([button], scopeType);
-
-			if (addedCount > 0) {
-				vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
-			}
-			return;
-		}
-
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
 			title: "Creating custom button...",
@@ -375,7 +388,9 @@ Example: "Button to add changes and commit code using git"`,
 			if (button.scriptContent) {
 				// Script button - show script content
 				const scriptPreview = button.scriptContent.split('\\n').join('\n');
-				cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${scriptPreview.split('\\n').join('\n   ')}`;
+				// Add proper indentation to each line of the script
+				const indentedScript = scriptPreview.split('\n').map(line => '   ' + line).join('\n');
+				cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${indentedScript}`;
 			} else {
 				// Regular command button
 				cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}`;
@@ -394,12 +409,15 @@ ${button.user_description}
 
 Do you want to create this button?`;
 
-			const choice = await vscode.window.showInformationMessage(
-				confirmationMessage,
-				{ modal: true },
-				'Create Button',
-				'Edit AI Description'
-			);
+			const choice = await CustomDialog.show({
+				title: 'Confirm Custom Button',
+				message: confirmationMessage,
+				buttons: [
+					{ label: 'Create Button', id: 'Create Button', isPrimary: true },
+					{ label: 'Edit AI Description', id: 'Edit AI Description' }
+				],
+				markdown: false
+			});
 
 			if (!choice) {
 				vscode.window.showInformationMessage('Button creation cancelled.');
@@ -640,15 +658,18 @@ ${safetyCheck.reason || 'The button appears to contain project paths, workspace 
 
 Do you want to add it to global scope anyway?`;
 
-		const result = await vscode.window.showWarningMessage(
-			warningMessage,
-			{ modal: true },
-			'Continue Anyway'
-		);
+		const result = await CustomDialog.show({
+			title: '⚠️ Workspace-Specific Button Warning',
+			message: warningMessage,
+			buttons: [
+				{ label: 'Continue Anyway', id: 'Continue Anyway', isPrimary: true },
+				{ label: 'Cancel', id: 'Cancel' }
+			],
+			markdown: false
+		});
 
 		// If user didn't click "Continue Anyway" (clicked Cancel or dismissed), abort
 		if (result !== 'Continue Anyway') {
-			vscode.window.showInformationMessage('DevBoost: Add to global cancelled.');
 			return;
 		}
 	}
@@ -713,10 +734,9 @@ Do you want to add it to global scope anyway?`;
 }
 
 // Helper function to get manual button input as fallback
-async function getManualButtonInput(description: string): Promise<smartCmdButton | null> {
+async function getManualButtonInput(scope: 'workspace' | 'global'): Promise<smartCmdButton | null> {
 	const name = await vscode.window.showInputBox({
 		prompt: 'Enter button name',
-		value: description.substring(0, 15),
 		validateInput: (value) => {
 			if (!value || value.trim().length === 0) {
 				return 'Button name cannot be empty';
@@ -732,10 +752,15 @@ async function getManualButtonInput(description: string): Promise<smartCmdButton
 		vscode.window.showInformationMessage('Button creation cancelled.');
 		return null;
 	}
+	
+	const descriptionInput = await vscode.window.showInputBox({
+		prompt: 'Edit button description',
+		placeHolder: 'Brief description of what this button does'
+	});
 
 	const execDir = await vscode.window.showInputBox({
-		prompt: 'Enter execution directory (optional)',
-		value: vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+		prompt: 'Enter execution directory',
+		value: scope === 'workspace' && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
 			? vscode.workspace.workspaceFolders[0].uri.fsPath
 			: '.',
 		placeHolder: 'e.g., ./src, /usr/local/bin, etc.'
@@ -788,11 +813,6 @@ async function getManualButtonInput(description: string): Promise<smartCmdButton
 			}
 		}
 	}
-	const descriptionInput = await vscode.window.showInputBox({
-		prompt: 'Edit button description (optional)',
-		value: description,
-		placeHolder: 'Brief description of what this button does'
-	});
 
 	return {
 		name: name.trim(),
