@@ -293,13 +293,24 @@ export async function processButtonWithScript(
 		// Generate script filename
 		const scriptFileName = button.scriptFile || generateScriptFileName(button.name, existingScripts);
 		
-		// Create script content with proper structure (no execDir - handled externally)
-		// Pass inputs for argument documentation
-		const scriptContent = createScriptContent(
-			button.scriptContent,
-			button.ai_description || button.user_description,
-			button.inputs
-		);
+		// Check if script content is already processed (has shebang or @echo off)
+        const firstLine = button.scriptContent.split('\n')[0].trim();
+        const isAlreadyProcessed = firstLine.startsWith('#!/') || firstLine.startsWith('@echo off');
+        
+        let scriptContent: string;
+        if (isAlreadyProcessed) {
+            // Script is already processed (e.g., when copying from workspace to global)
+            // Use it directly without calling createScriptContent
+            scriptContent = button.scriptContent;
+        } else {
+            // Create script content with proper structure (no execDir - handled externally)
+            // Pass inputs for argument documentation
+            scriptContent = createScriptContent(
+                button.scriptContent,
+                button.ai_description || button.user_description,
+                button.inputs
+            );
+        }
 		
 		// Save script file
 		const scriptPath = await saveScript(scriptContent, scriptFileName, button.scope, globalStoragePath);

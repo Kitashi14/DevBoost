@@ -669,22 +669,9 @@ Do you want to add it to global scope anyway?`;
 				scope: 'global',
 			};
 			
-			// Process the script button (this will save to global scripts folder)
-			const processedButton = await scriptManager.processButtonWithScript(
-				globalButton,
-				buttonsProvider.globalStoragePath
-			);
-			
-			if (!processedButton) {
-				vscode.window.showErrorMessage('Failed to process script for global scope.');
-				return;
-			}
-			
-			globalButton = processedButton;
-			
 		} catch (error) {
-			console.error('Error copying script to global:', error);
-			vscode.window.showErrorMessage('Failed to copy script file to global scope.');
+			console.error('Error reading script to global:', error);
+			vscode.window.showErrorMessage('Failed to read script file to global scope.');
 			return;
 		}
 	} else {
