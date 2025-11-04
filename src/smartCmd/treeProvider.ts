@@ -39,21 +39,6 @@ class SmartCmdTreeItemBase extends vscode.TreeItem {
 	}
 }
 
-// SmartCmd parent tree item
-class SmartCmdParentTreeItem extends SmartCmdTreeItemBase {
-	constructor(
-		public readonly totalButtons: number
-	) {
-		super(
-			'SmartCmd',
-			vscode.TreeItemCollapsibleState.Expanded,
-			'smartcmd'
-		);
-		this.description = `${totalButtons} button${totalButtons !== 1 ? 's' : ''}`;
-		this.contextValue = 'smartcmd';
-	}
-}
-
 // Section tree item (parent nodes for Global/Workspace)
 class SmartCmdSectionTreeItem extends SmartCmdTreeItemBase {
 	constructor(
@@ -200,37 +185,6 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 				sections.push(new SmartCmdSectionTreeItem('workspace', workspaceButtons.length));
 			}
 
-			// If no buttons exist, show helpful actions
-			if (sections.length === 0) {
-				const createButtonItem = new SmartCmdTreeItemBase(
-					'Create Your First Button',
-					vscode.TreeItemCollapsibleState.None,
-					'section'
-				);
-				createButtonItem.description = 'Click to get started';
-				createButtonItem.iconPath = new vscode.ThemeIcon('add');
-				createButtonItem.contextValue = 'createFirstButton';
-				createButtonItem.command = {
-					command: 'devboost.smartCmdCreateCustomButton',
-					title: 'Create Custom Button'
-				};
-				sections.push(createButtonItem);
-				
-				const createAIButtonItem = new SmartCmdTreeItemBase(
-					'Create AI Suggested Buttons',
-					vscode.TreeItemCollapsibleState.None,
-					'section'
-				);
-				createAIButtonItem.description = 'Based on your activity';
-				createAIButtonItem.iconPath = new vscode.ThemeIcon('sparkle');
-				createAIButtonItem.contextValue = 'createAIButtons';
-				createAIButtonItem.command = {
-					command: 'devboost.smartCmdCreateButtons',
-					title: 'Create AI Buttons'
-				};
-				sections.push(createAIButtonItem);
-			}
-
 			return Promise.resolve(sections);
 		}
 
@@ -306,14 +260,8 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 				const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope);
 
 				if (duplicateButton) {
-					// Find the actual button object from existing buttons
-					const existingButton = this.buttons.find(btn => btn.name === duplicateButton);
-					if (existingButton) {
-						duplicateButtons.push({newButton: b, existingButton: existingButton});
-						console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateButton + ')');
-					} else {
-						validButtons.push(b);
-					}
+					duplicateButtons.push({newButton: b, existingButton: duplicateButton});
+					console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateButton.name + ')');
 				} else {
 					validButtons.push(b);
 				}
@@ -791,5 +739,4 @@ What would you like to do?`;
 		}
 	}
 }
-
 

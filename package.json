@@ -49,11 +49,6 @@
         "icon": "$(sparkle)"
       },
       {
-        "command": "devboost.smartCmdCreateButtonsEnhanced",
-        "title": "SmartCmd: Create Enhanced AI Suggested Buttons",
-        "icon": "$(sparkle)"
-      },
-      {
         "command": "devboost.smartCmdCreateCustomButton",
         "title": "SmartCmd: Create Custom Button",
         "icon": "$(add)"
@@ -134,26 +129,6 @@
       ],
       "view/item/context": [
         {
-          "command": "devboost.smartCmdCreateButtons",
-          "when": "view == devboost.smartCmdView && viewItem == smartcmd",
-          "group": "inline@1"
-        },
-        {
-          "command": "devboost.smartCmdCreateButtonsEnhanced",
-          "when": "view == devboost.smartCmdView && viewItem == smartcmd",
-          "group": "inline@2"
-        },
-        {
-          "command": "devboost.smartCmdCreateCustomButton",
-          "when": "view == devboost.smartCmdView && viewItem == smartcmd",
-          "group": "inline@3"
-        },
-        {
-          "command": "devboost.refreshButtons",
-          "when": "view == devboost.smartCmdView && viewItem == smartcmd",
-          "group": "inline@4"
-        },
-        {
           "command": "devboost.openButtonsFile",
           "when": "view == devboost.smartCmdView && viewItem == section",
           "group": "inline@1"
@@ -171,15 +146,16 @@
         {
           "command": "devboost.addToGlobal",
           "when": "view == devboost.smartCmdView && viewItem == workspaceButton",
+          "group": "1_modify@3"
         },
         {
           "command": "devboost.openScriptFile",
-          "when": "view == devboost.buttonsView && viewItem =~ /ScriptButton$/",
+          "when": "view == devboost.smartCmdView && viewItem =~ /ScriptButton$/",
           "group": "1_modify@2"
         },
         {
           "command": "devboost.addToGlobal",
-          "when": "view == devboost.buttonsView && viewItem == workspaceButton || viewItem == workspaceScriptButton",
+          "when": "view == devboost.smartCmdView && (viewItem == workspaceButton || viewItem == workspaceScriptButton)",
           "group": "1_modify@3"
         },
         {

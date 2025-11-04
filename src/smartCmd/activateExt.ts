@@ -48,20 +48,17 @@ export async function activateSmartCmd(
 		await handlers.createAIButtons(activityLogPath, buttonsProvider);
 	});
 
-	// Register enhanced AI buttons command (using same function as regular AI buttons)
-	const createAIButtonsEnhancedDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateButtonsEnhanced', async () => {
-		await handlers.createAIButtons(activityLogPath, buttonsProvider);
-	});
-
 	const createCustomButtonDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateCustomButton', async (sectionObj: any) => {
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
-			if(sectionObj.section === 'global'){ 
+			if(sectionObj.section == 'global'){ 
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Global');
-			} else {
+			}
+			else {
 				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Workspace');
 			}
-		} else {
+		}
+		else {
 			await handlers.createCustomButton(promptInputPath, buttonsProvider);
 		}
 	});
@@ -123,7 +120,6 @@ export async function activateSmartCmd(
 	// Register all SmartCmd commands
 	context.subscriptions.push(
 		createAIButtonsDisposable,
-		createAIButtonsEnhancedDisposable,
 		createCustomButtonDisposable,
 		executeButtonDisposable,
 		deleteButtonDisposable,
@@ -227,7 +223,7 @@ async function loadExampleButtonsIfNeeded(
 				'View Buttons'
 			).then(selection => {
 				if (selection === 'View Buttons') {
-					vscode.commands.executeCommand('devboost.buttonsView.focus');
+					vscode.commands.executeCommand('devboost.smartCmdView.focus');
 				}
 			});
 		}

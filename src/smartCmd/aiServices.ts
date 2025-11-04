@@ -1,4 +1,4 @@
-// AI Services Module - SmartCmd LLM-related functions
+// AI Services Module - All LLM-related functions
 import * as vscode from 'vscode';
 import { smartCmdButton } from './treeProvider';
 import * as path from 'path';
@@ -79,13 +79,13 @@ function getSystemInfo(): { platform: string; shell: string} {
 
 /**
  * AI-powered duplicate detection using semantic similarity
- * Returns the name of the existing button if duplicate found, null otherwise
+ * Returns the existing button if duplicate found, null otherwise
  */
 export async function checkDuplicateButton(
 	newButton: smartCmdButton,
 	existingButtons: smartCmdButton[],
 	targetScope: 'workspace' | 'global'
-): Promise<string | null> {
+): Promise<smartCmdButton | null> {
 	if (existingButtons.length === 0) {
 		return null;
 	}
@@ -117,13 +117,13 @@ export async function checkDuplicateButton(
 		
 		if (newCmdNormalized === existingCmdNormalized) {
 			console.log(`Duplicate detected: "${newButton.cmd}" matches "${existing.cmd}" (${existing.scope})`);
-			return existing.name;
+			return existing;
 		}
 	}
 
 	// Use AI for semantic similarity check
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
 		
 		if (models.length === 0) {
 			return null;
@@ -133,7 +133,7 @@ export async function checkDuplicateButton(
 
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.ai_description || b.user_description || 'N/A';
-			return `${i + 1}. Name: "${b.name}", Command: "${b.cmd}", Description: "${desc}", Scope: ${b.scope}`;
+			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", Scope: ${b.scope}`;
 		}).join('\n');
 
 		const scopeContext = targetScope === 'global'
@@ -146,6 +146,7 @@ export async function checkDuplicateButton(
 		
 New Button (Target Scope: ${targetScope}):
 - Name: "${newButton.name}"
+- Exec Dir: "${newButton.execDir && newButton.execDir.trim() !== '' ? newButton.execDir : '.'}"
 - Command: "${newButton.cmd}"
 - Description: "${newButtonDesc}"
 
@@ -163,8 +164,11 @@ Consider buttons as duplicates if they:
 Don't consider buttons as duplicates if they:
 1. Have different commands even if they seem related (e.g., "git commit" vs "git push")
 2. Have specific tasks assigned to it even if a similar command exists
+3. Execute commands in different directories that change their context significantly
 
-If it's a duplicate/similar, respond with ONLY the NAME of the most similar existing button (e.g., "🔨 Build Project").
+If it's a duplicate/similar, respond with JSON containing the existing button's details:
+{"name": "🔨 Build Project", "execDir": "./backend", "cmd": "npm run build", "scope": "workspace"}
+
 If it's unique, respond with only "UNIQUE".`;
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
@@ -177,6 +181,13 @@ If it's unique, respond with only "UNIQUE".`;
 			fullResponse += part;
 		}
 
+		// Log prompt for development
+		await logPromptToFile('checkDuplicateButton', prompt, fullResponse, {
+			newButton: { name: newButton.name, execDir: newButton.execDir, cmd: newButton.cmd },
+			targetScope,
+			existingButtonsCount: buttonsToCheck.length
+		});
+
 		console.log('AI duplicate detection response:', fullResponse);
 		const answer = fullResponse.trim();
 		
@@ -184,8 +195,44 @@ If it's unique, respond with only "UNIQUE".`;
 			return null;
 		}
 		
-		console.log(`AI detected duplicate: "${newButton.name}" is similar to "${answer}"`);
-		return answer;
+		// Try to parse JSON response with button details
+		try {
+			// Clean up the response (remove code blocks if present)
+			let cleanedAnswer = answer.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+			
+			// Try to find JSON object in the response
+			const jsonMatch = cleanedAnswer.match(/\{[^}]+\}/);
+			if (jsonMatch) {
+				const aiResponse = JSON.parse(jsonMatch[0]);
+				
+				// Validate that we have the required fields
+				if (aiResponse.name && aiResponse.cmd && aiResponse.scope) {
+					// Find the button that matches ALL three fields
+					const matchingButton = buttonsToCheck.find(b => 
+						b.name === aiResponse.name && 
+						normalizeCmd(b.cmd) === normalizeCmd(aiResponse.cmd) &&
+						b.scope === aiResponse.scope &&
+						b.execDir === aiResponse.execDir
+					);
+					
+					if (matchingButton) {
+						console.log(`AI detected duplicate: "${newButton.name}" is similar to "${matchingButton.name}" (cmd: "${matchingButton.cmd}", scope: ${matchingButton.scope}, execDir: ${matchingButton.execDir})`);
+						return matchingButton;
+					} else {
+						console.warn(`AI returned button details but couldn't find exact match: ${JSON.stringify(aiResponse)}`);
+						return null;
+					}
+				}
+			}
+		} catch (parseError) {
+			console.warn('Failed to parse AI response as JSON:', parseError);
+			console.warn('AI response was:', answer);
+		}
+		
+		// If we couldn't parse the response or validate the match, treat as not a duplicate
+		// Better to allow a potential duplicate than to incorrectly match by name alone
+		console.log('Could not validate duplicate with full details, treating as unique');
+		return null;
 
 	} catch (error) {
 		console.error('Error in AI duplicate detection:', error);
@@ -195,14 +242,15 @@ If it's unique, respond with only "UNIQUE".`;
 
 /**
  * Check if a button is safe to add to global scope using AI
+ * Returns an object with isSafe boolean and reason string
  */
-export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise<boolean> {
+export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise<{ isSafe: boolean; reason?: string }> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
 		
 		if (models.length === 0) {
 			console.log('DevBoost: No AI model available for global safety check');
-			return true;
+			return { isSafe: true };
 		}
 
 		const model = models[0];
@@ -217,13 +265,13 @@ Button Details:
 - AI Description: "${button.ai_description || 'N/A'}"
 
 A button is WORKSPACE-SPECIFIC if it:
-1. Uses RELATIVE paths that reference project structure (e.g., ./src/build.sh, ../config/setup.js, npm run custom-script)
-2. References project-specific directories/files (e.g., ./node_modules, ./package.json, ./src, ./config)
-3. Uses workspace-specific configuration files in project root (e.g., .env, config.json, settings.json)
-4. Runs project-specific npm/yarn scripts that may not exist in other projects (e.g., npm run deploy-prod)
-5. References workspace settings or workspace-only VS Code commands
-6. Contains project-specific variable names, database names, or project identifiers
-7. Uses paths like "node scripts/build.js" which assumes project structure
+1. Uses RELATIVE paths that is not generic directory like current directory and reference project structure (e.g., ./src/build.sh, ../config/setup.js, npm run custom-script)
+2. Uses workspace-specific configuration files in project root (e.g., .env, config.json, settings.json)
+3. Runs project-specific npm/yarn scripts that may not exist in other projects (e.g., npm run deploy-prod)
+4. References workspace settings or workspace-only VS Code commands
+5. Contains workspace-specific variable names, database names, or project identifiers
+6. Uses paths like "node scripts/build.js" which assumes workspace structure
+7. Name or description indicates workspace-specific context
 
 A button is GLOBAL-SAFE if it:
 1. Uses generic commands that work anywhere (e.g., git status, npm install, npm test, ls, cd)
@@ -235,11 +283,16 @@ A button is GLOBAL-SAFE if it:
 7. General utility commands that don't depend on project structure
 8. System-level scripts or applications with absolute paths that exist across projects
 
-IMPORTANT: Absolute paths to system tools are SAFE (they're global). Relative paths to project files are UNSAFE (they're workspace-specific).
+IMPORTANT: Absolute paths to system tools are SAFE (they're global). Relative paths to workspace files are UNSAFE (they're workspace-specific).
 
-Respond with ONLY one word:
-- "SAFE" if the button can be used globally across all projects
-- "UNSAFE" if the button is workspace-specific and shouldn't be global`;
+Response format:
+- If SAFE: Respond with only "SAFE"
+- If UNSAFE: Respond with JSON: {"status": "UNSAFE", "reason": "Brief explanation why it's workspace-specific"}
+
+Examples:
+SAFE
+{"status": "UNSAFE", "reason": "Uses relative path ./src which assumes specific project structure"}
+{"status": "UNSAFE", "reason": "Runs npm script 'deploy-prod' which may not exist in other projects"}`;
 
 		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
@@ -250,157 +303,63 @@ Respond with ONLY one word:
 			fullResponse += part;
 		}
 
-		console.log('DevBoost: Global safety check response:', fullResponse);
-		const answer = fullResponse.trim().toUpperCase();
-		
 		// Log prompt for development
 		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
 			button: { name: button.name, execDir: button.execDir, cmd: button.cmd },
 			currentScope: button.scope
 		});
+
+		console.log('DevBoost: Global safety check response:', fullResponse);
+		const answer = fullResponse.trim();
 		
-		return answer.includes('SAFE') && !answer.includes('UNSAFE');
+		// Check if response is simply "SAFE"
+		if (answer.toUpperCase() === 'SAFE' || (answer.toUpperCase().includes('SAFE') && !answer.toUpperCase().includes('UNSAFE'))) {
+			return { isSafe: true };
+		}
+		
+		// Try to parse JSON response with reason
+		try {
+			const jsonMatch = answer.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				const parsed = JSON.parse(jsonMatch[0]);
+				if (parsed.status === 'UNSAFE' && parsed.reason) {
+					return { isSafe: false, reason: parsed.reason };
+				}
+			}
+		} catch (parseError) {
+			console.warn('Failed to parse AI safety check response as JSON:', parseError);
+		}
+		
+		// Default to unsafe if we couldn't determine
+		return { isSafe: false, reason: 'Could not determine safety. Button may contain workspace-specific elements.' };
 
 	} catch (error) {
 		console.error('Error in global safety check:', error);
-		return true;
+		return { isSafe: true };
 	}
 }
 
 /**
- * Enhanced context analysis for deeper workflow understanding
- */
-function analyzeWorkflowPatterns(optimizedLog: any): any {
-	const activities = optimizedLog.activities || new Map();
-	const recentLogs = optimizedLog.recentLogs || [];
-	
-	// Parse recent logs for sequential patterns
-	const commandSequences: string[][] = [];
-	let currentSequence: string[] = [];
-	let lastTimestamp = '';
-	
-	for (const logLine of recentLogs) {
-		const match = logLine.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*\|\s*Command:\s*(.+?)\s*\|\s*Context:\s*(.+)$/);
-		if (match) {
-			const timestamp = match[1];
-			const command = match[2].trim();
-			const contextStr = match[3];
-			
-			try {
-				const context = JSON.parse(contextStr);
-				const workingDir = context.terminal?.cwd || '';
-				const fullCommand = `${command} [${path.basename(workingDir)}]`;
-				
-				// If commands are within 2 minutes, consider them part of same workflow
-				const timeDiff = lastTimestamp ? new Date(timestamp).getTime() - new Date(lastTimestamp).getTime() : 0;
-				if (timeDiff < 120000 && currentSequence.length < 5) { // 2 minutes, max 5 commands
-					currentSequence.push(fullCommand);
-				} else {
-					if (currentSequence.length >= 2) {
-						commandSequences.push([...currentSequence]);
-					}
-					currentSequence = [fullCommand];
-				}
-				lastTimestamp = timestamp;
-			} catch (error) {
-				// Skip malformed entries
-			}
-		}
-	}
-	
-	// Add final sequence if it has multiple commands
-	if (currentSequence.length >= 2) {
-		commandSequences.push(currentSequence);
-	}
-	
-	// Analyze directory patterns
-	const directoryUsage = new Map<string, number>();
-	const directoryCommands = new Map<string, string[]>();
-	
-	for (const logLine of recentLogs) {
-		const match = logLine.match(/Context:\s*(.+)$/);
-		if (match) {
-			try {
-				const context = JSON.parse(match[1]);
-				const cwd = context.terminal?.cwd;
-				const command = logLine.match(/Command:\s*(.+?)\s*\|/)?.[1];
-				
-				if (cwd && command) {
-					const relativeDir = cwd.replace(context.workspace?.path || '', '').replace(/^\//, '') || 'root';
-					directoryUsage.set(relativeDir, (directoryUsage.get(relativeDir) || 0) + 1);
-					
-					if (!directoryCommands.has(relativeDir)) {
-						directoryCommands.set(relativeDir, []);
-					}
-					directoryCommands.get(relativeDir)!.push(command);
-				}
-			} catch (error) {
-				// Skip malformed entries
-			}
-		}
-	}
-	
-	// Identify common workflow patterns
-	const workflowPatterns = {
-		frontendDevFlow: commandSequences.some(seq => 
-			seq.some(cmd => cmd.includes('cd frontend') || cmd.includes('[frontend]')) &&
-			seq.some(cmd => cmd.includes('npm') && (cmd.includes('install') || cmd.includes('dev') || cmd.includes('start')))
-		),
-		backendDevFlow: commandSequences.some(seq => 
-			seq.some(cmd => cmd.includes('cd backend') || cmd.includes('[backend]')) &&
-			seq.some(cmd => cmd.includes('npm') && (cmd.includes('install') || cmd.includes('start') || cmd.includes('dev')))
-		),
-		gitWorkflow: commandSequences.some(seq => 
-			seq.filter(cmd => cmd.includes('git')).length >= 2
-		),
-		testingWorkflow: commandSequences.some(seq => 
-			seq.some(cmd => cmd.includes('test') || cmd.includes('lint') || cmd.includes('format'))
-		),
-		buildDeployFlow: commandSequences.some(seq => 
-			seq.some(cmd => cmd.includes('build')) &&
-			seq.some(cmd => cmd.includes('docker') || cmd.includes('deploy') || cmd.includes('push'))
-		)
-	};
-	
-	// Calculate workflow complexity scores
-	const complexityMetrics = {
-		multiDirectory: directoryUsage.size > 2,
-		chainedCommands: commandSequences.filter(seq => seq.length >= 3).length > 0,
-		repeatPatterns: commandSequences.filter(seq => 
-			seq.filter((cmd, i, arr) => arr.indexOf(cmd) !== i).length > 0
-		).length > 0
-	};
-	
-	return {
-		commandSequences,
-		directoryUsage: Array.from(directoryUsage.entries()).sort((a, b) => b[1] - a[1]),
-		directoryCommands: Object.fromEntries(directoryCommands),
-		workflowPatterns,
-		complexityMetrics,
-		topDirectories: Array.from(directoryUsage.entries())
-			.sort((a, b) => b[1] - a[1])
-			.slice(0, 5)
-			.map(([dir, count]) => ({ dir, count }))
-	};
-}
-
-/**
- * Get AI suggestions for buttons based on activity patterns with enhanced workflow analysis
+ * Get AI suggestions for buttons based on activity patterns
  */
 export async function getAISuggestions(
-	topActivities: string[],
-	optimizedLogData?: any
+	optimizedLog: { summary: string; recentLogs: string[] }
 ): Promise<smartCmdButton[]> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		// Log ALL available Copilot models first
+		const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+		console.log('DevBoost: ALL available Copilot models:', allModels.map(m => ({ family: m.family, name: m.name, maxTokens: m.maxInputTokens })));
+		
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
+		
+		// Log selected model
+		console.log('DevBoost: Selected copilot models:', models.map(m => ({ family: m.family, name: m.name, maxTokens: m.maxInputTokens })));
 		
 		if (models.length === 0) {
 			vscode.window.showWarningMessage('GitHub Copilot models not available. Using fallback suggestions.');
-			return getFallbackSuggestions(topActivities);
+			return getFallbackSuggestions([]);
 		}
 
-		const model = models[0];
-		const { platform, shell } = getSystemInfo();
 		const model = models[0];
 		const { platform, shell } = getSystemInfo();
 		let workspaceName = 'N/A';
@@ -599,84 +558,9 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 
 		// Log prompt for development
 		
-		// Enhanced workflow analysis
-		const workflowAnalysis = optimizedLogData ? analyzeWorkflowPatterns(optimizedLogData) : null;
-		
-		// Build comprehensive context prompt
-		let contextPrompt = `
-🎯 WORKFLOW INTELLIGENCE ANALYSIS
 
-📊 ACTIVITY SUMMARY:
-${topActivities.slice(0, 10).map((activity, i) => `${i + 1}. ${activity}`).join('\n')}
-
-`;
-
-		if (workflowAnalysis) {
-			contextPrompt += `
-🔄 DETECTED WORKFLOW PATTERNS:
-${Object.entries(workflowAnalysis.workflowPatterns)
-	.filter(([_, detected]) => detected)
-	.map(([pattern, _]) => `✓ ${pattern.replace(/([A-Z])/g, ' $1').toLowerCase()}`)
-	.join('\n')}
-
-📂 DIRECTORY USAGE PATTERNS:
-${workflowAnalysis.topDirectories.map(({dir, count}: any) => `• ${dir === 'root' ? 'project root' : dir}: ${count} commands`).join('\n')}
-
-🔗 COMMAND SEQUENCES (Recent Workflows):
-${workflowAnalysis.commandSequences.slice(0, 3).map((sequence: any, i: number) => 
-	`${i + 1}. ${sequence.join(' → ')}`
-).join('\n')}
-
-🧠 COMPLEXITY INDICATORS:
-${workflowAnalysis.complexityMetrics.multiDirectory ? '• Multi-directory navigation required' : ''}
-${workflowAnalysis.complexityMetrics.chainedCommands ? '• Complex command chaining detected' : ''}
-${workflowAnalysis.complexityMetrics.repeatPatterns ? '• Repeated workflow patterns found' : ''}
-`;
-		}
-
-		const intelligentPrompt = `${contextPrompt}
-
-🎯 SMART BUTTON GENERATION STRATEGY:
-
-Create intelligent automation buttons that solve COMPLETE workflows, not just individual commands.
-
-PRINCIPLES:
-1. **WORKFLOW COMPLETENESS**: Each button should handle an entire workflow from start to finish
-2. **CONTEXT AWARENESS**: Include proper directory navigation and environment setup
-3. **ERROR RESILIENCE**: Handle common failure points with fallbacks
-4. **EFFICIENCY**: Combine related actions to minimize user intervention
-5. **SPECIFICITY**: Tailor to the detected patterns and directory structure
-
-BUTTON DESIGN REQUIREMENTS:
-• Include explicit directory navigation (cd commands)
-• Chain multiple related actions with &&
-• Add error handling where appropriate (|| echo "Error")
-• Use project-specific patterns detected in the logs
-• Consider cross-platform compatibility for ${platform}
-• Optimize for ${shell} shell
-
-🚀 GENERATE 4-6 BUTTONS that represent:
-1. Most frequent workflow automation
-2. Cross-directory development patterns  
-3. Git workflow optimization
-4. Build/test/deploy automation
-5. Environment setup/maintenance
-6. Error recovery/debugging helpers
-
-FORMAT: Return ONLY valid JSON array, no markdown or extra text:
-
-[
-  {
-    "name": "🚀 [Descriptive Action Name]",
-    "cmd": "cd [dir] && [action1] && [action2] && [action3]",
-    "ai_description": "Intelligent explanation of why this workflow automation is valuable"
-  }
-]
-
-Make each button solve a real workflow problem detected in the activity patterns.`;
-
-		const messages = [vscode.LanguageModelChatMessage.User(intelligentPrompt)];
-		console.log('Enhanced AI button suggestions prompt:', intelligentPrompt);
+		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+		console.log('AI button suggestions prompt:', prompt);
 		
 		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
@@ -685,60 +569,45 @@ Make each button solve a real workflow problem detected in the activity patterns
 			fullResponse += part;
 		}
 
-		console.log('AI suggestions response:', fullResponse);
+		await logPromptToFile('getAISuggestions', prompt, fullResponse, {
+			platform,
+			shell,
+			recentLogsCount: optimizedLog.recentLogs.length,
+		});
 
-		try {
-			// Clean up response - remove any markdown formatting
-			const cleanResponse = fullResponse.replace(/```json\s*|\s*```/g, '').trim();
-			
-			// Handle case where AI might return explanation before JSON
-			const jsonMatch = cleanResponse.match(/\[[\s\S]*\]/);
-			const jsonStr = jsonMatch ? jsonMatch[0] : cleanResponse;
-			
-			const suggestions = JSON.parse(jsonStr);
-			
-			if (!Array.isArray(suggestions)) {
-				throw new Error('Response is not an array');
-			}
+		console.log('AI response for button suggestions:', fullResponse);
 
-			// Convert to smartCmdButton format and validate
-			const buttons: smartCmdButton[] = suggestions
-				.filter(suggestion => suggestion.name && (suggestion.cmd || suggestion.scriptContent))
-				.map(suggestion => ({
-					name: suggestion.name,
-					cmd: suggestion.cmd,
-					scriptContent: suggestion.scriptContent,
-					execDir: suggestion.execDir,
-					ai_description: suggestion.ai_description || suggestion.description || 'AI-generated command',
-					inputs: suggestion.inputs
-				}));
-
-			console.log('DevBoost: Generated AI button suggestions:', buttons);
-			return buttons;
-
-		} catch (parseError) {
-			console.error('Error parsing AI response:', parseError);
-			console.error('Raw response:', fullResponse);
-			vscode.window.showWarningMessage('AI generated invalid response. Using fallback suggestions.');
-			return getFallbackSuggestions(topActivities);
+		const jsonMatch = fullResponse.match(/\[[\s\S]*\]/);
+		if (jsonMatch) {
+			const buttons = JSON.parse(jsonMatch[0]) as smartCmdButton[];
+			console.log('Parsed buttons from AI response:', buttons);
+			return buttons.filter(b => b.name && (b.cmd || b.scriptContent));
 		}
 
-	} catch (error) {
-		console.error('Error getting AI suggestions:', error);
-		vscode.window.showErrorMessage('Failed to get AI suggestions. Using fallback suggestions.');
-		return getFallbackSuggestions(topActivities);
+		vscode.window.showWarningMessage('Could not parse AI response. Using fallback suggestions.');
+		return getFallbackSuggestions([]);
+
+	} catch (err) {
+		if (err instanceof vscode.LanguageModelError) {
+			console.log('Language Model Error:', err.message, err.code);
+			vscode.window.showWarningMessage(`AI suggestion failed: ${err.message}. Using fallback suggestions.`);
+		} else {
+			console.error('Unexpected error getting AI suggestions:', err);
+			vscode.window.showWarningMessage('AI suggestion failed. Using fallback suggestions.');
+		}
+		return getFallbackSuggestions([]);
 	}
 }
 
 /**
- * Get custom button suggestion from AI based on user description
+ * Get custom button suggestion from user description
  */
 export async function getCustomButtonSuggestion(
 	description: string,
 	scope: 'workspace' | 'global' = 'workspace'
 ): Promise<smartCmdButton | null> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
 		
 		if (models.length === 0) {
 			vscode.window.showInformationMessage('GitHub Copilot not available. Please enter button details manually.');
@@ -788,7 +657,6 @@ IMPORTANT: Since this button is global, you should:
 SYSTEM INFORMATION:
 - Operating System: ${platform}
 - Shell: ${shell}
-
 ${workspaceContext}
 
 IMPORTANT: Generate commands that are compatible with ${platform} and ${shell}.
@@ -884,11 +752,9 @@ WRONG FORMAT (DO NOT DO THIS):
 
 Only respond with the JSON object, no additional text.`;
 
-		// Use the prompt directly for smartCmd AI services
-		const finalPrompt = prompt;
 
-		const messages = [vscode.LanguageModelChatMessage.User(finalPrompt)];
-		console.log('Custom button prompt:', finalPrompt);
+		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+		console.log('Custom button prompt:', prompt);
 
 		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
@@ -896,6 +762,15 @@ Only respond with the JSON object, no additional text.`;
 		for await (const part of response.text) {
 			fullResponse += part;
 		}
+
+		// Log prompt for development
+		await logPromptToFile('getCustomButtonSuggestion', prompt, fullResponse, {
+			description,
+			scope,
+			platform,
+			shell,
+			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name
+		});
 
 		console.log('AI response for custom button:', fullResponse);
 
@@ -911,6 +786,7 @@ Only respond with the JSON object, no additional text.`;
 				
 				if (button.name && (button.cmd || button.scriptContent) && button.ai_description) {
 					button.user_description = description;
+					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
 					console.log('Successfully parsed button:', button);
 					return button;
 				}

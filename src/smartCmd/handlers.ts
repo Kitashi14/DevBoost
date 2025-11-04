@@ -79,10 +79,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 			title: "Analyzing your workflow patterns...",
 			cancellable: false
 		}, async (progress) => {
-			// Parse activities from optimized log
-			const activities = activityLogging.parseActivityLog(optimizedLog.recentLogs.join('\n'));
-			const topActivities = activityLogging.getTopActivities(activities, 5);
-			return await aiServices.getAISuggestions(topActivities, optimizedLog);
+			return await aiServices.getAISuggestions(optimizedLog);
 		});
 
 		if (buttons.length === 0) {
@@ -378,7 +375,8 @@ Example: "Button to add changes and commit code using git"`,
 			cancellable: false
 		}, async (progress) => {
 			// Get AI suggestion from GitHub Copilot
-			const button = await aiServices.getCustomButtonSuggestion(description);
+			const buttonScope = scope === 'Global' ? 'global' : 'workspace';
+			const button = await aiServices.getCustomButtonSuggestion(description, buttonScope);
 
 			if (!button) {
 				vscode.window.showWarningMessage('Could not generate button. Please try again.');
@@ -644,7 +642,7 @@ export async function addToGlobal(item: SmartCmdButtonTreeItem, buttonsProvider:
 		return await aiServices.checkIfButtonIsGlobalSafe(item.button);
 	});
 
-	if (!safetyCheck) {
+	if (!safetyCheck.isSafe) {
 		const warningMessage = `This button appears to be workspace-specific and may not work correctly in other projects.
 
 Button Details:
@@ -656,7 +654,7 @@ ${item.button.inputs ? `• Inputs: ${item.button.inputs.map((i: any) => i.place
 • Current Scope: Workspace
 
 Why it's workspace-specific:
-${'The button appears to contain project paths, workspace settings, or project-specific commands that might not exist in other projects.'}
+${safetyCheck.reason || 'The button appears to contain project paths, workspace settings, or project-specific commands that might not exist in other projects.'}
 
 Do you want to add it to global scope anyway?`;
 
