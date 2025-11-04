@@ -1,0 +1,39 @@
+{
+  "global": [
+    {
+      "name": "SmartCmd Example: System Info",
+      "cmd": "uname -a && echo '' && echo 'Node version:' && node --version && echo 'NPM version:' && npm --version",
+      "ai_description": "Display system information including OS, Node.js and NPM versions",
+      "execDir": "."
+    }
+  ],
+  "workspace": [
+    {
+      "name": "SmartCmd Example: Git Status & Log",
+      "cmd": "git status && echo '====================' && git log --oneline -5",
+      "ai_description": "Show current git status and last 5 commits in a single view",
+      "execDir": "<workspace>"
+    },
+    {
+      "name": "SmartCmd Example: Test with User Input",
+      "cmd": "",
+      "scriptFile": "example_greeting.sh",
+      "ai_description": "Example script that demonstrates input fields and argument passing",
+      "execDir": "<workspace>",
+      "inputs": [
+        {
+          "placeholder": "Enter your name",
+          "variable": "{name}"
+        },
+        {
+          "placeholder": "Enter a greeting message",
+          "variable": "{message}"
+        }
+      ]
+    }
+  ],
+  "exampleScript": {
+    "filename": "example_greeting.sh",
+    "content": "#!/usr/bin/env bash\n# Example script that demonstrates input fields and argument passing\n#\n# Script Arguments:\n#   $1 - name: Enter your name\n#   $2 - message: Enter a greeting message\n#\n\nset -e  # Exit on error\n\necho \"==========================================\"\necho \"Hello, $1!\"\necho \"Message: $2\"\necho \"==========================================\"\necho \"\"\necho \"This is an example script button that:\"\necho \"  • Takes user inputs (name and message)\"\necho \"  • Passes them as positional arguments ($1, $2)\"\necho \"  • Runs in workspace context using <workspace> keyword\"\necho \"\"\necho \"Script executed successfully at: $(date)\"\n"
+  }
+}

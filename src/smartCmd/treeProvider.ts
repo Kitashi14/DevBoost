@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as aiServices from './aiServices';
+import * as scriptManager from './scriptManager';
+import { CustomDialog } from '../customDialog';
 
 // Input field interface for commands that need user input
 export interface InputField {
@@ -19,6 +21,8 @@ export interface smartCmdButton {
 	inputs?: InputField[];          // Optional input fields for dynamic commands
 	scope?: 'workspace' | 'global';
 	execDir?: string;               // Optional execution directory
+	scriptFile?: string;            // Optional script file name (stored in scripts folder)
+	scriptContent?: string;         // Script content (only used during creation, not saved to JSON)
 }
 
 // Section type for organizing buttons
@@ -88,7 +92,12 @@ export class SmartCmdButtonTreeItem extends SmartCmdTreeItemBase {
 			tooltipParts.push(`${button.ai_description}`);
 		}
 		
-		tooltipParts.push(`Command: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}`);
+		// Show script file indicator if present
+		const cmdDisplay = button.scriptFile 
+			? `Script: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.scriptFile}`
+			: `Command: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}`;
+		
+		tooltipParts.push(cmdDisplay);
 		
 		// Add input fields info
 		const inputInfo = button.inputs && button.inputs.length > 0 
@@ -98,12 +107,19 @@ export class SmartCmdButtonTreeItem extends SmartCmdTreeItemBase {
 		this.tooltip = tooltipParts.join('\n\n') + inputInfo;
 		
 		// Display AI description or user description in the tree view description field
-		this.description = button.ai_description || button.user_description || '';
+		// Add script indicator in description
+		const scriptIndicator = button.scriptFile ? ' 📜' : '';
+		this.description = (button.ai_description || button.user_description || '') + scriptIndicator;
 		
-		this.iconPath = new vscode.ThemeIcon('play');
+		this.iconPath = new vscode.ThemeIcon(button.scriptFile ? 'debug-line-by-line' : 'play');
 		
-		// Set contextValue based on button scope for conditional menu items
-		this.contextValue = button.scope === 'global' ? 'globalButton' : 'workspaceButton';
+		// Set contextValue based on button scope and whether it's a script
+		// This allows conditional menu items in package.json
+		if (button.scriptFile) {
+			this.contextValue = button.scope === 'global' ? 'globalScriptButton' : 'workspaceScriptButton';
+		} else {
+			this.contextValue = button.scope === 'global' ? 'globalButton' : 'workspaceButton';
+		}
 		
 		// Make it clickable - pass the entire button object for input handling
 		this.command = {
@@ -123,7 +139,8 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 
 	constructor(
 		private context: vscode.ExtensionContext,
-		private globalButtonsPath: string
+		private globalButtonsPath: string,
+		public readonly globalStoragePath: string // Made public for access in handlers
 	) {}
 
 	refresh(): void {
@@ -236,6 +253,33 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			return 0;
 		}
 
+		// Process buttons with scripts first
+		const processedButtons: smartCmdButton[] = [];
+		for (const button of buttons) {
+			if (button.scriptContent) {
+				// Button needs a script file
+				const processedButton = await scriptManager.processButtonWithScript(
+					{ ...button, scope },
+					this.globalStoragePath
+				);
+				
+				if (processedButton) {
+					processedButtons.push(processedButton);
+				} else {
+					console.error('DevBoost: Failed to process script for button:', button.name);
+					vscode.window.showWarningMessage(`Failed to create script for button: ${button.name}`);
+				}
+			} else {
+				// Regular command button
+				processedButtons.push(button);
+			}
+		}
+
+		if (processedButtons.length === 0) {
+			vscode.window.showWarningMessage('DevBoost: No valid buttons to add after processing.');
+			return 0;
+		}
+
 		// Validate buttons and check for duplicates
 		const validButtons: smartCmdButton[] = [];
 		const duplicateButtons: Array<{newButton: smartCmdButton, existingButton: smartCmdButton}> = [];
@@ -247,8 +291,8 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			title: "Checking for duplicate buttons",
 			cancellable: false
 		}, async (progress) => {
-			for (let i = 0; i < buttons.length; i++) {
-				const b = buttons[i];
+			for (let i = 0; i < processedButtons.length; i++) {
+				const b = processedButtons[i];
 				
 				// Check if button is valid
 				if (!b.name || !b.cmd || b.name.trim().length === 0 || b.cmd.trim().length === 0) {
@@ -258,7 +302,7 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 				}
 
 				// Check for duplicates using AI-powered semantic comparison
-				progress.report({ message: `${i + 1}/${buttons.length}` });
+				progress.report({ message: `${i + 1}/${processedButtons.length}` });
 				const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope);
 
 				if (duplicateButton) {
@@ -276,38 +320,60 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			}
 		});
 
+		console.log(duplicateButtons)
 		// Show feedback about duplicates - ask for confirmation one by one
 		if (duplicateButtons.length > 0) {
 			for (const dup of duplicateButtons) {
+				console.log(dup)
+				const newButtonType = dup.newButton.scriptFile ? ' (script)' : '';
+				const existingButtonType = dup.existingButton.scriptFile ? ' (script)' : '';
+				
 				const confirmationMessage = `This button appears similar to an existing one:
 
-New Button:
+New Button${newButtonType}:
 • Name: ${dup.newButton.name}
 • Command: ${dup.newButton.execDir && dup.newButton.execDir.trim() !== '.' && dup.newButton.execDir.trim() !== '' ? 'cd ' +  dup.newButton.execDir + ' && ' : ''}${dup.newButton.cmd}
 • Description: ${dup.newButton.ai_description || dup.newButton.user_description || 'N/A'}
 • Scope: ${scope === 'global' ? 'Global' : 'Workspace'}
 
-Existing Similar Button:
+Existing Similar Button${existingButtonType}:
 • Name: ${dup.existingButton.name}
 • Command: ${dup.existingButton.execDir && dup.existingButton.execDir.trim() !== '.' && dup.existingButton.execDir.trim() !== '' ? 'cd ' +  dup.existingButton.execDir + ' && ' : ''}${dup.existingButton.cmd}
 • Description: ${dup.existingButton.ai_description || dup.existingButton.user_description || 'N/A'}
 • Scope: ${dup.existingButton.scope === 'global' ? 'Global' : 'Workspace'}
 
 What would you like to do?`;
-
-				const result = await vscode.window.showWarningMessage(
-					confirmationMessage,
-					{ modal: true },
-					'Add Anyway',
-					'Replace Existing',
-					'Skip'
-				);
+				console.log(confirmationMessage);
+				const result = await CustomDialog.show({
+					title: '⚠️ Duplicate Button Detected',
+					message: confirmationMessage,
+					buttons: [
+						{ label: 'Add without editing', id: 'Add without editing', isPrimary: true },
+						{ label: 'Edit New then Add', id: 'Edit New then Add' },
+						{ label: 'Edit Existing then Add', id: 'Edit Existing then Add' },
+						{ label: 'Replace Existing', id: 'Replace Existing' },
+						{ label: 'Skip', id: 'Skip' }
+					],
+					markdown: false
+				});
 				
-				if (result === 'Add Anyway') {
+				if (result === 'Add without editing') {
 					// Add the new button alongside the existing one
 					validButtons.push(dup.newButton);
-				} else if (result === 'Replace Existing') {
-					// Remove the existing button and add the new one
+				} else if (result === 'Edit New then Add') {
+					// Let user edit the new button before adding
+					const editedButton = await this.editNewButton(dup.newButton);
+					if (editedButton) {
+						validButtons.push(editedButton);
+					} else {
+						// User cancelled - delete the newly created script if any
+						if (dup.newButton.scriptFile) {
+							await scriptManager.deleteScript(dup.newButton.scriptFile, scope, this.globalStoragePath);
+						}
+						continue;
+					}
+				} else if (result === 'Edit Existing then Add') {
+					// Let user edit the existing button
 					const existingIndex = this.buttons.findIndex(
 						b => b.name === dup.existingButton.name && 
 						     b.cmd === dup.existingButton.cmd && 
@@ -315,11 +381,54 @@ What would you like to do?`;
 							 b.execDir === dup.existingButton.execDir
 					);
 					if (existingIndex !== -1) {
+						const editedButton = await this.editNewButton(this.buttons[existingIndex]);
+						if (editedButton) {
+							this.buttons[existingIndex] = editedButton;
+							await this.saveButtons();
+							this.refresh();
+							vscode.window.showInformationMessage(`Updated existing button: ${editedButton.name}`);
+						}
+						else {
+							// User cancelled - delete the newly created script if any
+							if (dup.newButton.scriptFile) {
+								await scriptManager.deleteScript(dup.newButton.scriptFile, scope, this.globalStoragePath);
+							}
+							continue;
+						}
+					}
+					// Add the new button as well
+					validButtons.push(dup.newButton);
+				} else if (result === 'Replace Existing') {
+					// Remove the existing button and its script if it has one
+					const existingIndex = this.buttons.findIndex(
+						b => b.name === dup.existingButton.name && 
+						     b.cmd === dup.existingButton.cmd && 
+						     b.scope === dup.existingButton.scope &&
+							 b.execDir === dup.existingButton.execDir
+					);
+					if (existingIndex !== -1) {
+						const existingButton = this.buttons[existingIndex];
+						// Delete script file if exists
+						if (existingButton.scriptFile && existingButton.scope) {
+							await scriptManager.deleteScript(existingButton.scriptFile, existingButton.scope, this.globalStoragePath);
+						}
 						this.buttons.splice(existingIndex, 1);
 					}
 					validButtons.push(dup.newButton);
+				} 
+				else if (result === 'Skip') {
+					// Skip - delete the newly created script if any
+					if (dup.newButton.scriptFile) {
+						await scriptManager.deleteScript(dup.newButton.scriptFile, scope, this.globalStoragePath);
+					}
 				}
-				// If 'Skip' or closed dialog, do nothing (button not added to validButtons)
+				else {
+					// User closed dialog or unknown option - treat as Skip for every other duplicate
+					if (dup.newButton.scriptFile) {
+						await scriptManager.deleteScript(dup.newButton.scriptFile, scope, this.globalStoragePath);
+					}
+					break;
+				}
 			}
 		}
 
@@ -344,7 +453,14 @@ What would you like to do?`;
 		// Show summary message
 		const messages: string[] = [];
 		if (validButtons.length > 0) {
-			messages.push(`Added ${validButtons.length} button${validButtons.length > 1 ? 's' : ''}`);
+			const scriptCount = validButtons.filter(b => b.scriptFile).length;
+			const cmdCount = validButtons.length - scriptCount;
+			if (cmdCount > 0) {
+				messages.push(`${cmdCount} command button${cmdCount > 1 ? 's' : ''}`);
+			}
+			if (scriptCount > 0) {
+				messages.push(`${scriptCount} script button${scriptCount > 1 ? 's' : ''}`);
+			}
 		}
 		const skippedDuplicates = duplicateButtons.length - duplicateButtons.filter(d => validButtons.includes(d.newButton)).length;
 		if (skippedDuplicates > 0) {
@@ -354,7 +470,7 @@ What would you like to do?`;
 			messages.push(`${invalidButtons.length} invalid button${invalidButtons.length > 1 ? 's' : ''} skipped`);
 		}
 		
-		vscode.window.showInformationMessage(`DevBoost: ${messages.join(', ')}.`);
+		vscode.window.showInformationMessage(`DevBoost: Added ${messages.join(', ')}.`);
 		return validButtons.length;
 	}
 
@@ -372,6 +488,15 @@ What would you like to do?`;
 		}
 
 		const button = this.buttons[index];
+		
+		// Delete script file if exists
+		if (button.scriptFile && button.scope) {
+			const deleted = await scriptManager.deleteScript(button.scriptFile, button.scope, this.globalStoragePath);
+			if (deleted) {
+				console.log(`DevBoost: Deleted script file for button: ${button.name}`);
+			}
+		}
+		
 		this.buttons.splice(index, 1);
 		
 		// Remove from storage
@@ -383,7 +508,8 @@ What would you like to do?`;
 			}
 			
 			this.refresh();
-			vscode.window.showInformationMessage(`Deleted button: ${button.name}`);
+			const buttonType = button.scriptFile ? ' (with script)' : '';
+			vscode.window.showInformationMessage(`Deleted button: ${button.name}${buttonType}`);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to delete button: ${button.name}`);
 			console.error('Delete button error:', error);
@@ -396,7 +522,7 @@ What would you like to do?`;
 			return;
 		}
 
-		const index = this.buttons.findIndex(b => b.name === item.button.name && b.cmd === item.button.cmd);
+		const index = this.buttons.findIndex(b => b.name === item.button.name && b.cmd === item.button.cmd && b.scope === item.button.scope && b.execDir === item.button.execDir);
 		if (index === -1) {
 			vscode.window.showWarningMessage(`DevBoost: Button "${item.button.name}" not found.`);
 			return;
@@ -421,11 +547,11 @@ What would you like to do?`;
 			return;
 		}
 
-		let newUserDescription: string | undefined = undefined;
+		let newDescription: string | undefined = undefined;
 		// Get new description
 		if(button.ai_description) {
 			const currentDesc = button.ai_description || '';
-			newUserDescription = await vscode.window.showInputBox({
+			newDescription = await vscode.window.showInputBox({
 				prompt: 'Edit AI-generated description',
 				value: currentDesc,
 				placeHolder: 'Brief description of what this button does'
@@ -433,7 +559,7 @@ What would you like to do?`;
 		}
 		else {
 			const currentDesc = button.ai_description || '';
-			newUserDescription = await vscode.window.showInputBox({
+			newDescription = await vscode.window.showInputBox({
 			prompt: 'Edit user description',
 			value: currentDesc,
 			placeHolder: 'Brief description of what this button does'
@@ -441,7 +567,7 @@ What would you like to do?`;
 		}
 		
 		// If user cancelled description input
-		if (newUserDescription === undefined) {
+		if (newDescription === undefined) {
 			vscode.window.showInformationMessage('Edit cancelled.');
 			return;
 		}
@@ -507,11 +633,17 @@ What would you like to do?`;
 		this.buttons[index] = {
 			...button,
 			name: newName.trim(),
-			user_description: newUserDescription?.trim() || button.user_description,
 			execDir: newExecDir?.trim() || button.execDir,
-			cmd: newCmd?.trim() || button.cmd,
-			inputs: inputs
+			cmd: newCmd?.trim() || button.cmd
 		};
+		if(button.ai_description) {
+			this.buttons[index].ai_description = newDescription?.trim() || button.ai_description;
+		} else {
+			this.buttons[index].user_description = newDescription?.trim() || button.user_description;
+		}
+		if(inputs.length != 0) {
+			this.buttons[index].inputs = inputs;
+		}
 
 		// Save to storage
 		try {
@@ -545,11 +677,98 @@ What would you like to do?`;
 			
 			const globalButtons = this.buttons
 				.filter(b => b.scope === 'global')
-				.map(({ scope, ...b }) => b);
+				.map(({ scope, scriptContent, ...b }) => b); // Exclude scope and scriptContent
 			
 			await fs.writeFile(this.globalButtonsPath, JSON.stringify(globalButtons, null, 2));
 		} catch (error) {
 			console.error('Error saving global buttons:', error);
+		}
+	}
+
+	// Edit a new button (used during duplicate detection)
+	private async editNewButton(button: smartCmdButton): Promise<smartCmdButton | null> {
+		// Get new name
+		const newName = await vscode.window.showInputBox({
+			prompt: 'Edit button name',
+			value: button.name,
+			validateInput: (value) => {
+				if (!value || value.trim().length === 0) {
+					return 'Button name cannot be empty';
+				}
+				return null;
+			}
+		});
+
+		if (!newName) {
+			vscode.window.showInformationMessage('Edit cancelled.');
+			return null;
+		}
+
+		// Get new description
+		const currentDesc = button.ai_description || button.user_description || '';
+		const descriptionPrompt = button.ai_description ? 'Edit AI-generated description' : 'Edit description';
+		
+		const newDescription = await vscode.window.showInputBox({
+			prompt: descriptionPrompt,
+			value: currentDesc,
+			placeHolder: 'Brief description of what this button does'
+		});
+		
+		// If user cancelled description input
+		if (newDescription === undefined) {
+			vscode.window.showInformationMessage('Edit cancelled.');
+			return null;
+		}
+
+		// Return updated button
+		const updatedButton = {
+			...button,
+			name: newName.trim()
+		};
+
+		if (button.ai_description) {
+			updatedButton.ai_description = newDescription.trim();
+		} else {
+			updatedButton.user_description = newDescription.trim();
+		}
+
+		return updatedButton;
+	}
+
+	// Open script file in editor
+	async openScriptFile(item: SmartCmdButtonTreeItem): Promise<void> {
+		if (!item || !item.button || !item.button.scriptFile) {
+			vscode.window.showWarningMessage('This button does not have a script file.');
+			return;
+		}
+
+		const button = item.button;
+		const scriptFile = button.scriptFile;
+		
+		if (!scriptFile) {
+			vscode.window.showWarningMessage('This button does not have a script file.');
+			return;
+		}
+		
+		const scriptsDir = scriptManager.getScriptsDir(button.scope || 'workspace', this.globalStoragePath);
+		
+		if (!scriptsDir) {
+			vscode.window.showErrorMessage('Could not determine scripts directory.');
+			return;
+		}
+
+		try {
+			const scriptPath = path.join(scriptsDir, scriptFile);
+			
+			// Check if file exists
+			await fs.access(scriptPath);
+			
+			// Open the file in editor
+			const document = await vscode.workspace.openTextDocument(scriptPath);
+			await vscode.window.showTextDocument(document, { preview: false });
+		} catch (error) {
+			console.error('Error opening script file:', error);
+			vscode.window.showErrorMessage(`Failed to open script file: ${scriptFile}`);
 		}
 	}
 
@@ -565,7 +784,7 @@ What would you like to do?`;
 			await fs.mkdir(path.dirname(buttonsFilePath), { recursive: true });
 			const workspaceButtons = this.buttons
 				.filter(b => b.scope === 'workspace')
-				.map(({ scope, ...b }) => b);
+				.map(({ scope, scriptContent, ...b }) => b); // Exclude scope and scriptContent
 			await fs.writeFile(buttonsFilePath, JSON.stringify(workspaceButtons, null, 2));
 		} catch (error) {
 			console.error('Error saving workspace buttons:', error);
