@@ -10,7 +10,6 @@ export async function activateSmartCmd(
 	context: vscode.ExtensionContext,
 	globalStoragePath: string,
 	activityLogPath: string | undefined,
-	promptInputPath: string
 ): Promise<void> {
 	// Initialize SmartCmd paths
 	const globalButtonsPath = path.join(globalStoragePath, 'global-buttons.json');
@@ -52,14 +51,14 @@ export async function activateSmartCmd(
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
 			if(sectionObj.section == 'global'){ 
-				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Global');
+				await handlers.createCustomButton(buttonsProvider, 'Global');
 			}
 			else {
-				await handlers.createCustomButton(promptInputPath, buttonsProvider, 'Workspace');
+				await handlers.createCustomButton(buttonsProvider, 'Workspace');
 			}
 		}
 		else {
-			await handlers.createCustomButton(promptInputPath, buttonsProvider);
+			await handlers.createCustomButton(buttonsProvider);
 		}
 	});
 

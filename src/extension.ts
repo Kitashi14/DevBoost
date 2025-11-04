@@ -11,23 +11,6 @@ import { PromptEnhancerTreeProvider } from './promptEnhancer/treeProvider';
 let activityLogPath: string | undefined;
 let cleanupTimer: NodeJS.Timeout | undefined;
 
-// Flag to track if prompt file is currently in use
-let isPromptFileInUse = false;
-
-// Helper function to acquire prompt file lock
-export function acquirePromptFileLock(): boolean {
-	if (isPromptFileInUse) {
-		vscode.window.showWarningMessage('DevBoost: Prompt file is currently in use. Please finish current task by closing the prompt-input.md file.');
-		return false;
-	}
-	isPromptFileInUse = true;
-	return true;
-}
-
-// Helper function to release prompt file lock
-export function releasePromptFileLock(): void {
-	isPromptFileInUse = false;
-}
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -47,10 +30,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Initialize global extension paths (in extension's global storage)
 	const globalStoragePath = context.globalStorageUri.fsPath;
-	const promptInputPath = path.join(globalStoragePath, 'prompt-input.md');
 
 	// // Activate SmartCmd tool
-	await activateSmartCmd(context, globalStoragePath, activityLogPath, promptInputPath);
+	await activateSmartCmd(context, globalStoragePath, activityLogPath);
 
 	// Register Prompt Enhancer commands
 	registerPromptEnhancerCommands(context);

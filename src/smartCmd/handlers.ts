@@ -9,7 +9,7 @@ import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButton
 import { CustomDialog } from '../commonView/customDialog';
 import { InputFormPanel } from '../commonView/inputFormPanel';
 import { ButtonFormPanel } from './view/manualButtonFormPanel';
-import { acquirePromptFileLock, releasePromptFileLock } from '../extension';
+import { AIButtonDescriptionPanel } from './view/aiButtonDescriptionPanel';
 
 // Create AI-suggested buttons based on activity log
 export async function createAIButtons( activityLogPath: string | undefined, buttonsProvider: SmartCmdButtonsTreeProvider) {
@@ -251,28 +251,8 @@ What would you like to do?`,
 	}
 }
 
-// Create custom button from user description
+// Create a custom button (manual or AI-assisted)
 export async function createCustomButton(
-	promptInputPath: string | undefined,
-	buttonsProvider: SmartCmdButtonsTreeProvider,
-	scopeInput?: 'Workspace' | 'Global'
-) {
-	// Try to acquire the prompt file lock
-	if (!acquirePromptFileLock()) {
-		return;
-	}
-
-	try {
-		await createCustomButtonInternal(promptInputPath, buttonsProvider, scopeInput);
-	} finally {
-		// Always release the lock when done
-		releasePromptFileLock();
-	}
-}
-
-// Internal function to handle the actual button creation logic
-async function createCustomButtonInternal(
-	promptInputPath: string | undefined,
 	buttonsProvider: SmartCmdButtonsTreeProvider,
 	scopeInput?: 'Workspace' | 'Global'
 ) {
@@ -296,16 +276,20 @@ async function createCustomButtonInternal(
 	}
 
 	if (useAI === 'No') {
-		const button = await ButtonFormPanel.show(scopeInput === 'Workspace' ? "workspace" : "global");
+		const result = await ButtonFormPanel.show(scopeInput === 'Workspace' ? "workspace" : "global") as any;
 
-		if (!button) {
+		if (!result) {
 			vscode.window.showInformationMessage('Button creation cancelled.');
 			return;
 		}
 
-		// Add button to tree view
-		const scopeType = scope === 'Global' ? 'global' : 'workspace';
-		const addedCount = await buttonsProvider.addButtons([button], scopeType);
+		// Extract the selected scope and remove it from the button object
+		const selectedScope = result.selectedScope || (scopeInput === 'Workspace' ? 'workspace' : 'global');
+		const button = { ...result };
+		delete (button as any).selectedScope;
+
+		// Add button to tree view using the scope selected in the form
+		const addedCount = await buttonsProvider.addButtons([button], selectedScope);
 
 		if (addedCount > 0) {
 			vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
@@ -313,94 +297,28 @@ async function createCustomButtonInternal(
 		return;
 	}
 
-	if (!promptInputPath) {
-		vscode.window.showErrorMessage('Prompt input file path not initialized.');
-		return;
-	}
-
 	try {
-		// Ensure the directory exists
-		await fs.mkdir(path.dirname(promptInputPath), { recursive: true });
+		// Show the AI button description form
+		const result = await AIButtonDescriptionPanel.show(scope === 'Global' ? 'global' : 'workspace');
 
-		// Clean the prompt input file (keep it empty)
-		await fs.writeFile(promptInputPath, '');
-
-		// Open the dedicated prompt input file
-		const doc = await vscode.workspace.openTextDocument(promptInputPath);
-		await vscode.window.showTextDocument(doc, { preview: false });
-
-		// Show info message with tips
-		vscode.window.showInformationMessage(
-`Describe the functionality of the button you want to create, then close this file for next steps.
-			
-Example: "Button to add changes and commit code using git"`,
-			{ modal: true }
-		);
-
-		// Wait for the file to be closed - use multiple events to detect closure
-		const description = await new Promise<string>((resolve) => {
-			let resolved = false;
-			
-			const checkAndResolve = async () => {
-				if (resolved) {
-					return;
-				}
-				
-				// Check if document is still open in tabs
-				const isOpen = vscode.window.tabGroups.all
-					.flatMap(group => group.tabs)
-					.some(tab => {
-						const tabInput = tab.input as any;
-						return tabInput?.uri?.fsPath === doc.uri.fsPath;
-					});
-				
-				if (!isOpen) {
-					console.log('Prompt input file closed, reading content...');
-					resolved = true;
-					disposable1.dispose();
-					disposable2.dispose();
-					
-					// Read content from the document
-					const content = doc.getText().trim();
-					
-					// Clean the file after reading
-					fs.writeFile(promptInputPath!, '').catch(error => {
-						console.error('Error cleaning prompt file:', error);
-					});
-					
-					console.log('File closed, content read:', content);
-					resolve(content);
-				}
-			};
-			
-			// Listen to tab changes
-			const disposable1 = vscode.window.tabGroups.onDidChangeTabs(async () => {
-				console.log('Tab changed, checking if prompt file is closed...');
-				await checkAndResolve();
-			});
-			
-			// Also listen to visible editors change as backup
-			const disposable2 = vscode.window.onDidChangeVisibleTextEditors(async () => {
-				console.log('Visible editors changed, checking if prompt file is closed...');
-				await checkAndResolve();
-			});
-		});
-
-		console.warn('User button description:', description);
-
-		// If content is empty, return
-		if (!description || description.length === 0) {
+		if (!result) {
+			vscode.window.showInformationMessage('Button creation cancelled.');
 			return;
 		}
+
+		const description = result.description;
+		const selectedScope = result.scope;
+
+		console.warn('User button description:', description);
+		console.warn('Selected scope:', selectedScope);
 
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
 			title: "Creating custom button...",
 			cancellable: false
 		}, async (progress) => {
-			// Get AI suggestion from GitHub Copilot
-			const buttonScope = scope === 'Global' ? 'global' : 'workspace';
-			const button = await aiServices.getCustomButtonSuggestion(description, buttonScope);
+			// Get AI suggestion from GitHub Copilot using the selected scope
+			const button = await aiServices.getCustomButtonSuggestion(description, selectedScope);
 
 			if (!button) {
 				vscode.window.showWarningMessage('Could not generate button. Please try again.');
@@ -490,9 +408,8 @@ Do you want to create this button?`;
 				button.ai_description = editedResult.description.trim();			
 			}
 
-			// Add button to tree view
-			const scopeType = scope === 'Global' ? 'global' : 'workspace';
-			const addedCount = await buttonsProvider.addButtons([button], scopeType);
+			// Add button to tree view using the selected scope from the form
+			const addedCount = await buttonsProvider.addButtons([button], selectedScope);
 
 			if (addedCount > 0) {
 				vscode.window.showInformationMessage(`Created custom button: ${button.name}`);

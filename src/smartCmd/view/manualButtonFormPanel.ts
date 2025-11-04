@@ -30,13 +30,14 @@ export class ButtonFormPanel {
 			panel.webview.onDidReceiveMessage(
 				message => {
 					if (message.command === 'submit') {
-						// Return the button data
-						const button: smartCmdButton = {
+						// Return the button data with the selected scope
+						const button: smartCmdButton & { selectedScope: 'workspace' | 'global' } = {
 							name: message.data.name,
 							cmd: message.data.cmd,
 							user_description: message.data.description || undefined,
 							inputs: message.data.inputs && message.data.inputs.length > 0 ? message.data.inputs : undefined,
-							execDir: message.data.execDir || '.'
+							execDir: message.data.execDir || '.',
+							selectedScope: message.data.scope as 'workspace' | 'global'
 						};
 						
 						// Dispose panel with animation delay
@@ -267,13 +268,16 @@ export class ButtonFormPanel {
 	<div class="container">
 		<h1>Create Custom Button Manually</h1>
 		
-		<div class="form-group">
-			<label for="scope">Scope</label>
-			<input type="text" id="scope" value="${scopeLabel}" disabled style="cursor: not-allowed; opacity: 0.6;">
-			<div class="hint">The scope where this button will be saved</div>
-		</div>
-		
 		<form id="buttonForm">
+			<div class="form-group">
+				<label for="scope">Scope<span class="required">*</span></label>
+				<select id="scope" style="width: 100%; padding: 8px 10px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 2px; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);">
+					<option value="workspace" ${scopeLabel === 'Workspace' ? 'selected' : ''}>Workspace</option>
+					<option value="global" ${scopeLabel === 'Global' ? 'selected' : ''}>Global</option>
+				</select>
+				<div class="hint">Choose where this button will be saved</div>
+			</div>
+			
 			<div class="form-group">
 				<label for="name">Button Name<span class="required">*</span></label>
 				<input type="text" id="name" maxlength="50" placeholder="e.g., Deploy to Production">
@@ -317,6 +321,7 @@ export class ButtonFormPanel {
 	<script>
 		const vscode = acquireVsCodeApi();
 		
+		const scopeInput = document.getElementById('scope');
 		const nameInput = document.getElementById('name');
 		const descriptionInput = document.getElementById('description');
 		const execDirInput = document.getElementById('execDir');
@@ -461,6 +466,7 @@ export class ButtonFormPanel {
 			vscode.postMessage({
 				command: 'submit',
 				data: {
+					scope: scopeInput.value,
 					name: nameInput.value.trim(),
 					description: descriptionInput.value.trim(),
 					execDir: execDirInput.value.trim() || '.',
