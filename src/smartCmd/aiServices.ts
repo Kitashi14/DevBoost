@@ -703,11 +703,14 @@ ${optimizedLog.recentLogs.join('\n')}
 `;
 				}
 				workspaceContext = `
+BUTTON SCOPE: Workspace-specific (will only be available in this project)
+
 WORKSPACE CONTEXT:
 - Workspace Name: ${workspaceName}
 - Workspace Path: ${workspacePath}
 - Workspace script dir path: ${path.join(workspacePath, '.vscode', 'devBoost', 'scripts')}
-- Button Scope: Workspace-specific (will only be available in this project)
+- Global extenstion Path: ${globalStoragePath}
+- Global script dir path: ${globalStoragePath ? path.join(globalStoragePath, 'scripts') : 'N/A'}
 
 IMPORTANT: Since this button is workspace-specific, you can
 - Use <workspace> as a placeholder for the workspace path (e.g., <workspace>/scripts/deploy.sh, <workspace>/src, <workspace>/scripts)

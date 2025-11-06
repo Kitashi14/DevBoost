@@ -163,7 +163,7 @@ Do you want to create these buttons?`;
 				}
 				
 				const buttonChoice = await CustomDialog.show({
-					title: 'Review Button ' + buttonCount,
+					title: 'Review Button ' + buttonCount + '/' + buttons.length,
 					message: `Review Button:
 
 Name: ${button.name}
@@ -188,7 +188,7 @@ What would you like to do?`,
 				} else if (buttonChoice === 'Edit details') {
 
 					const editedResult = await InputFormPanel.show(
-						`Edit Button ${buttonCount} Details`,
+						`Edit Button ${buttonCount}/${buttons.length} Details`,
 						button.scriptContent ? [
 							{
 								id: 'name',
