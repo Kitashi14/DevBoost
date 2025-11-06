@@ -78,7 +78,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 		// Get AI suggestions from GitHub Copilot with enhanced context
 		const buttons = await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: "Analyzing your workflow patterns...",
+			title: "Analyzing your workflow patterns in this workspace...",
 			cancellable: false
 		}, async (progress) => {
 			return await aiServices.getAISuggestions(optimizedLog);
@@ -100,14 +100,15 @@ ${buttons.map((btn, i) => {
 			? btn.scriptContent.substring(0, 100) + '...' 
 			: btn.scriptContent;
 		// Add proper indentation to each line of the script
-		const indentedScript = scriptPreview.split('\n').map(line => '      ' + line).join('\n');
-		cmdDisplay = `Cmd: cd ${btn.execDir && btn.execDir.trim() !== '' ? btn.execDir : '.'} && run_script\n   Script:\n${indentedScript}`;
+		const indentedScript = scriptPreview.split('\n').map(line => '         ' + line).join('\n');
+		cmdDisplay = `Cmd: cd ${btn.execDir && btn.execDir.trim() !== '' ? btn.execDir : '.'} && run_script\n\n   Script:\n${indentedScript}`;
 	} else {
 		// Regular command button
 		cmdDisplay = `Cmd: ${btn.execDir && btn.execDir.trim() !== '.' && btn.execDir.trim() !== '' ? 'cd ' + btn.execDir + ' && ' : ''}${btn.cmd}`;
 	}
 	
 	return `${i + 1}. ${btn.name}
+
    ${cmdDisplay}
 
    AI Description: ${btn.description}`;
@@ -142,8 +143,8 @@ Do you want to create these buttons?`;
 					// Script button - show script content
 					const scriptPreview = button.scriptContent.split('\\n').join('\n');
 					// Add proper indentation to each line of the script
-					const indentedScript = scriptPreview.split('\n').map(line => '   ' + line).join('\n');
-					cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${indentedScript}`;
+					const indentedScript = scriptPreview.split('\n').map(line => '      ' + line).join('\n');
+					cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\n\nScript:\n${indentedScript}`;
 				} else {
 					// Regular command button
 					cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? 'cd ' + button.execDir + ' && ' : ''}${button.cmd}`;
@@ -154,6 +155,7 @@ Do you want to create these buttons?`;
 					message: `Review Button:
 
 Name: ${button.name}
+
 ${cmdDisplay}
 
 AI description: ${button.description}
@@ -320,6 +322,7 @@ What would you like to do?`,
 
 // Create a custom button (manual or AI-assisted)
 export async function createCustomButton(
+	activityLogPath: string | undefined,
 	buttonsProvider: SmartCmdButtonsTreeProvider,
 	scopeInput?: 'Workspace' | 'Global'
 ) {
@@ -390,7 +393,7 @@ export async function createCustomButton(
 
 			// Race between AI generation and timeout
 			button = await Promise.race([
-				aiServices.getCustomButtonSuggestion(description, selectedScope),
+				aiServices.getCustomButtonSuggestion(description, selectedScope, activityLogPath),
 				timeoutPromise
 			]);
 
@@ -433,8 +436,8 @@ export async function createCustomButton(
 			// Script button - show script content
 			const scriptPreview = button.scriptContent.split('\\n').join('\n');
 			// Add proper indentation to each line of the script
-			const indentedScript = scriptPreview.split('\n').map(line => '   ' + line).join('\n');
-			cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\nScript:\n${indentedScript}`;
+			const indentedScript = scriptPreview.split('\n').map(line => '      ' + line).join('\n');
+			cmdDisplay = `Cmd: cd ${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'} && run_script\n\nScript:\n${indentedScript}`;
 		} else {
 			// Regular command button
 			cmdDisplay = `Cmd: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}`;
@@ -443,6 +446,7 @@ export async function createCustomButton(
 		const confirmationMessage = `AI has generated the following button:
 
 Name: ${button.name}
+
 ${cmdDisplay}
 
 AI Description:

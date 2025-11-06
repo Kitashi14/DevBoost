@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { smartCmdButton } from './treeProvider';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { exec } from 'child_process';
+import * as activityLogging from '../activityLogging';
 
 // Development mode flag - set to false in production
 const ENABLE_PROMPT_LOGGING = true;
@@ -620,7 +620,8 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
  */
 export async function getCustomButtonSuggestion(
 	description: string,
-	scope: 'workspace' | 'global' = 'workspace'
+	scope: 'workspace' | 'global' = 'workspace',
+	activityLogPath?: string
 ): Promise<smartCmdButton | null> {
 	try {
 		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
@@ -640,6 +641,19 @@ export async function getCustomButtonSuggestion(
 			if (workspaceFolder) {
 				const workspaceName = workspaceFolder.name;
 				const workspacePath = workspaceFolder.uri.fsPath;
+				let workspaceLogContext = '';
+				// Optimize log for AI consumption using intelligent sampling
+				if (activityLogPath) {
+					const optimizedLog = await activityLogging.optimizeLogForAI(activityLogPath);
+					workspaceLogContext = `
+WORKSPACE ACTIVITY LOG SUMMARY:
+${optimizedLog.summary}
+
+
+RECENT ACTIVITY LOG (Last ${optimizedLog.recentLogs.length} Commands in Sequential Order):
+${optimizedLog.recentLogs.join('\n')}
+`;
+				}
 				workspaceContext = `
 WORKSPACE CONTEXT:
 - Workspace Name: ${workspaceName}
@@ -651,7 +665,8 @@ IMPORTANT: Since this button is workspace-specific, you can
 - Use current directory (.) or home directory (~) as path references when told in description
 - Use absolute paths of system-wide tools (e.g., /usr/local/bin/tool.sh, C:\\Tools\\build.exe)
 - Reference project-specific files and directories if provided (e.g., ./package.json, ./config)
-`;
+
+${workspaceLogContext}`;
 			}
 		} else {
 			workspaceContext = `

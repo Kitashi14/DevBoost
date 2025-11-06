@@ -51,14 +51,14 @@ export async function activateSmartCmd(
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
 			if(sectionObj.section == 'global'){ 
-				await handlers.createCustomButton(buttonsProvider, 'Global');
+				await handlers.createCustomButton(activityLogPath, buttonsProvider, 'Global');
 			}
 			else {
-				await handlers.createCustomButton(buttonsProvider, 'Workspace');
+				await handlers.createCustomButton(activityLogPath, buttonsProvider, 'Workspace');
 			}
 		}
 		else {
-			await handlers.createCustomButton(buttonsProvider);
+			await handlers.createCustomButton(activityLogPath,buttonsProvider);
 		}
 	});
 
