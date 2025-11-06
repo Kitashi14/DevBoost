@@ -347,7 +347,8 @@ SAFE
  * Get AI suggestions for buttons based on activity patterns
  */
 export async function getAISuggestions(
-	optimizedLog: { summary: string; recentLogs: string[] }
+	optimizedLog: { summary: string; recentLogs: string[] },
+	existingButtons: smartCmdButton[] = []
 ): Promise<smartCmdButton[]> {
 	try {
 		// Log ALL available Copilot models first
@@ -373,6 +374,12 @@ export async function getAISuggestions(
 			workspaceName = workspaceFolder.name;
 			workspacePath = workspaceFolder.uri.fsPath;
 		}
+
+		const existingButtonsInfo = existingButtons.map((b, i) => {
+			const desc = b.description || 'N/A';
+			const user_prompt = b.user_prompt || 'N/A';
+			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}`;
+		}).join('\n');
 
 	
 	const prompt = 
@@ -468,6 +475,9 @@ Provide:
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
 4. If the command needs user input, include input fields with placeholders (use {variableName} format)
 5. execDir: where to run from (applies to both cmd and scriptContent)
+
+Existing Buttons to Check (for duplication avoidance):
+${existingButtonsInfo}
 
 📝 RESPONSE FORMAT (JSON only):
 
@@ -621,7 +631,8 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 export async function getCustomButtonSuggestion(
 	description: string,
 	scope: 'workspace' | 'global' = 'workspace',
-	activityLogPath?: string
+	activityLogPath?: string,
+	existingButtons: smartCmdButton[] = []
 ): Promise<smartCmdButton | null> {
 	try {
 		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
@@ -633,6 +644,16 @@ export async function getCustomButtonSuggestion(
 
 		const model = models[0];
 		const { platform, shell } = getSystemInfo();
+
+		const buttonsToCheck = scope === 'global'
+			? existingButtons.filter(b => b.scope === 'global')
+			: existingButtons;
+
+		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
+			const desc = b.description || 'N/A';
+			const user_prompt = b.user_prompt || 'N/A';
+			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}`;
+		}).join('\n');
 		
 		// Get workspace context if scope is workspace
 		let workspaceContext = '';
@@ -646,6 +667,12 @@ export async function getCustomButtonSuggestion(
 				if (activityLogPath) {
 					const optimizedLog = await activityLogging.optimizeLogForAI(activityLogPath);
 					workspaceLogContext = `
+WORKSPACE LOG CONTEXT:
+- This workspace has the following activity patterns. 
+- Analyze these to understand the developer's workflow.
+- Recent commands include file edits, terminal commands, and debugging sessions.
+- Suggest button according to the description and try to align it with the actual workflow patterns below.
+
 WORKSPACE ACTIVITY LOG SUMMARY:
 ${optimizedLog.summary}
 
@@ -724,6 +751,10 @@ Provide:
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
 4. If the command needs user input, include input fields with placeholders (use {variableName} format)
+
+Existing Buttons to Check (for duplication avoidance):
+${existingButtonsInfo}
+
 
 The user provided this description: "${description}" (this will be stored as user_prompt)
 

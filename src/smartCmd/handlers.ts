@@ -79,10 +79,22 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 		const buttons = await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
 			title: "Analyzing your workflow patterns in this workspace...",
-			cancellable: false
-		}, async (progress) => {
-			return await aiServices.getAISuggestions(optimizedLog);
+			cancellable: true
+		}, async (progress, token) => {
+			token.onCancellationRequested(() => {
+				vscode.window.showInformationMessage('Button creation cancelled.');
+			});
+			const suggestedButtons = await aiServices.getAISuggestions(optimizedLog, buttonsProvider.getButtons());
+			if(token.isCancellationRequested){
+				return 'cancelled';
+			}
+			return suggestedButtons;
 		});
+
+		if(buttons === 'cancelled'){
+			console.log('DevBoost: Button creation was cancelled by user');
+			return;
+		}
 
 		if (buttons.length === 0) {
 			vscode.window.showWarningMessage('Could not generate button suggestions. Please try again.');
@@ -384,18 +396,9 @@ export async function createCustomButton(
 
 		let button;
 		try {
-			// Create a timeout promise (30 seconds)
-			const timeoutPromise = new Promise<never>((_, reject) => {
-				setTimeout(() => {
-					reject(new Error('Request timed out. The AI service is taking too long to respond. Please try again. You can also create button manually.'));
-				}, 15000); // 15 seconds timeout
-			});
 
-			// Race between AI generation and timeout
-			button = await Promise.race([
-				aiServices.getCustomButtonSuggestion(description, selectedScope, activityLogPath),
-				timeoutPromise
-			]);
+			// Generate button using AI service with existing buttons for duplication check
+			button = await aiServices.getCustomButtonSuggestion(description, selectedScope, activityLogPath, buttonsProvider.getButtons());
 
 			// Check if panel was disposed during generation
 			if (isPanelDisposed) {
@@ -761,8 +764,8 @@ export async function addToGlobal(item: SmartCmdButtonTreeItem, buttonsProvider:
 	const safetyCheck = item.button.scriptFile? { isSafe: true } : await vscode.window.withProgress({
 		location: vscode.ProgressLocation.Notification,
 		title: "Analyzing button compatibility with global scope...",
-		cancellable: false
-	}, async (progress) => {
+		cancellable: true
+	}, async (progress, token) => {
 		return await aiServices.checkIfButtonIsGlobalSafe(item.button);
 	});
 

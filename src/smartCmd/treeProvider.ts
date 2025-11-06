@@ -136,6 +136,10 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 		this._onDidChangeTreeData.fire();
 	}
 
+	getButtons(): smartCmdButton[] {
+		return this.buttons;
+	}
+
 	async loadButtons(): Promise<void> {
 		this.buttons = [];
 
