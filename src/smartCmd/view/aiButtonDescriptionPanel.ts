@@ -3,13 +3,14 @@ import * as vscode from 'vscode';
 export interface AIButtonDescriptionResult {
 	description: string;
 	scope: 'workspace' | 'global';
+	panel: vscode.WebviewPanel;
 }
 
 export class AIButtonDescriptionPanel {
 	/**
 	 * Show a form to get AI button description from user
 	 * @param defaultScope The default scope ('workspace' or 'global')
-	 * @returns Promise resolving to description and scope or null if cancelled
+	 * @returns Promise resolving to description, scope and panel or null if cancelled
 	 */
 	public static async show(defaultScope: 'workspace' | 'global' = 'workspace'): Promise<AIButtonDescriptionResult | null> {
 		return new Promise<AIButtonDescriptionResult | null>((resolve) => {
@@ -19,7 +20,7 @@ export class AIButtonDescriptionPanel {
 				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
 				{
 					enableScripts: true,
-					retainContextWhenHidden: false
+					retainContextWhenHidden: true
 				}
 			);
 
@@ -31,19 +32,16 @@ export class AIButtonDescriptionPanel {
 					if (message.command === 'submit') {
 						const result: AIButtonDescriptionResult = {
 							description: message.data.description,
-							scope: message.data.scope as 'workspace' | 'global'
+							scope: message.data.scope as 'workspace' | 'global',
+							panel: panel
 						};
-						
-						// Dispose panel with animation delay
-						setTimeout(() => {
-							panel.dispose();
-						}, 50);
 						
 						resolve(result);
 					} else if (message.command === 'cancel') {
 						// Dispose panel with animation delay
 						setTimeout(() => {
 							panel.dispose();
+							vscode.window.showInformationMessage('Button creation cancelled.');
 						}, 50);
 						
 						resolve(null);
@@ -57,6 +55,29 @@ export class AIButtonDescriptionPanel {
 				resolve(null);
 			});
 		});
+	}
+
+	/**
+	 * Show loading state in the webview
+	 */
+	public static showLoading(panel: vscode.WebviewPanel) {
+		panel.webview.postMessage({ command: 'showLoading' });
+	}
+
+	/**
+	 * Show error in the webview
+	 */
+	public static showError(panel: vscode.WebviewPanel, errorMessage: string) {
+		panel.webview.postMessage({ command: 'showError', error: errorMessage });
+	}
+
+	/**
+	 * Close the panel
+	 */
+	public static close(panel: vscode.WebviewPanel) {
+		setTimeout(() => {
+			panel.dispose();
+		}, 50);
 	}
 
 	private static getHtmlContent(webview: vscode.Webview, defaultScope: 'workspace' | 'global'): string {
@@ -358,7 +379,8 @@ export class AIButtonDescriptionPanel {
 		}
 
 		.button-group {
-			margin-top: 24px;
+			margin-top: 12px;
+			margin-bottom: 12px;
 			display: flex;
 			gap: 10px;
 			justify-content: flex-end;
@@ -412,9 +434,146 @@ export class AIButtonDescriptionPanel {
 			text-align: right;
 			margin-top: 4px;
 		}
+
+		/* Loader Overlay */
+		.loader-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: rgba(0, 0, 0, 0.7);
+			display: none;
+			justify-content: center;
+			align-items: center;
+			z-index: 9999;
+			animation: fadeIn 0.2s ease-in;
+		}
+
+		.loader-overlay.show {
+			display: flex;
+		}
+
+		.loader-content {
+			background-color: var(--vscode-editor-background);
+			border: 1px solid var(--vscode-input-border);
+			border-radius: 4px;
+			padding: 32px 48px;
+			text-align: center;
+			box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+			animation: slideUp 0.3s ease-out;
+		}
+
+		.loader-spinner {
+			width: 48px;
+			height: 48px;
+			border: 4px solid var(--vscode-input-border);
+			border-top-color: var(--vscode-button-background);
+			border-radius: 50%;
+			animation: spin 0.8s linear infinite;
+			margin: 0 auto 16px;
+		}
+
+		@keyframes spin {
+			to { transform: rotate(360deg); }
+		}
+
+		.loader-text {
+			font-size: 14px;
+			color: var(--vscode-foreground);
+			margin-bottom: 8px;
+			font-weight: 500;
+		}
+
+		.loader-subtext {
+			font-size: 12px;
+			color: var(--vscode-descriptionForeground);
+		}
+
+		.error-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: rgba(0, 0, 0, 0.7);
+			display: none;
+			justify-content: center;
+			align-items: center;
+			z-index: 9999;
+			animation: fadeIn 0.2s ease-in;
+		}
+
+		.error-overlay.show {
+			display: flex;
+		}
+
+		.error-content {
+			background-color: var(--vscode-editor-background);
+			border: 2px solid var(--vscode-errorForeground);
+			border-radius: 4px;
+			padding: 24px 32px;
+			text-align: center;
+			box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+			animation: slideUp 0.3s ease-out;
+			max-width: 500px;
+		}
+
+		.error-icon {
+			font-size: 48px;
+			margin-bottom: 16px;
+		}
+
+		.error-title {
+			font-size: 16px;
+			color: var(--vscode-errorForeground);
+			margin-bottom: 12px;
+			font-weight: 600;
+		}
+
+		.error-message {
+			font-size: 13px;
+			color: var(--vscode-foreground);
+			margin-bottom: 20px;
+			line-height: 1.5;
+		}
+
+		.error-button {
+			padding: 8px 20px;
+			background-color: var(--vscode-button-background);
+			color: var(--vscode-button-foreground);
+			border: none;
+			border-radius: 2px;
+			cursor: pointer;
+			font-family: var(--vscode-font-family);
+			font-size: 13px;
+		}
+
+		.error-button:hover {
+			background-color: var(--vscode-button-hoverBackground);
+		}
 	</style>
 </head>
 <body>
+	<!-- Loader Overlay -->
+	<div class="loader-overlay" id="loaderOverlay">
+		<div class="loader-content">
+			<div class="loader-spinner"></div>
+			<div class="loader-text">Generating button with AI...</div>
+			<div class="loader-subtext">This may take a few seconds</div>
+		</div>
+	</div>
+
+	<!-- Error Overlay -->
+	<div class="error-overlay" id="errorOverlay">
+		<div class="error-content">
+			<div class="error-icon">⚠️</div>
+			<div class="error-title">Failed to Generate Button</div>
+			<div class="error-message" id="errorMessage">An error occurred while generating the button.</div>
+			<button class="error-button" id="errorCloseBtn">Close</button>
+		</div>
+	</div>
+
 	<div class="container">
 		<h1>🤖 Describe Your Custom Button</h1>
 		<p class="subtitle">AI will generate a button based on your description</p>
@@ -423,21 +582,12 @@ export class AIButtonDescriptionPanel {
 			<h3>ℹ️ How It Works</h3>
 			<p>Describe what you want your button to do in plain English. The AI will generate:</p>
 			<p>• A descriptive name with an emoji</p>
-			<p>• The appropriate command or script</p>
+			<p>• The appropriate command or shell/batch script</p>
 			<p>• Execution directory (where the command runs)</p>
 			<p>• Input fields if user interaction is needed</p>
 		</div>
 
 		<form id="descriptionForm">
-			<div class="form-group">
-				<label for="scope">Scope<span class="required">*</span></label>
-				<select id="scope">
-					<option value="workspace" ${scopeLabel === 'Workspace' ? 'selected' : ''}>Workspace (This project only)</option>
-					<option value="global" ${scopeLabel === 'Global' ? 'selected' : ''}>Global (All projects)</option>
-				</select>
-				<div class="hint">Workspace buttons are project-specific. Global buttons work everywhere.</div>
-			</div>
-
 			<div class="examples-section">
 				<h3>📝 Example Descriptions</h3>
 				<div class="example" data-text="Button to add all changes and commit code using git with a custom message">
@@ -461,9 +611,16 @@ export class AIButtonDescriptionPanel {
 					<div class="example-text">"Create a backup script that archives the current project with timestamp"</div>
 				</div>
 			</div>
-
 			<div class="form-group">
-				<label for="description">Your Description<span class="required">*</span></label>
+				<label for="scope">Scope<span class="required">*</span></label>
+				<select id="scope">
+					<option value="workspace" ${scopeLabel === 'Workspace' ? 'selected' : ''}>Workspace (This project only)</option>
+					<option value="global" ${scopeLabel === 'Global' ? 'selected' : ''}>Global (All projects)</option>
+				</select>
+				<div class="hint">Workspace buttons are project-specific. Global buttons work everywhere.</div>
+			</div>
+			<div class="form-group">
+				<label for="description">Prompt (Your despcription)<span class="required">*</span></label>
 				<textarea 
 					id="description" 
 					placeholder="e.g., Button to add changes and commit code using git with a custom message"
@@ -471,6 +628,10 @@ export class AIButtonDescriptionPanel {
 				></textarea>
 				<div class="error-message" id="descriptionError"></div>
 				<div class="char-count"><span id="charCount">0</span> characters</div>
+			</div>
+			<div class="button-group">
+				<button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
+				<button type="submit" class="btn-primary" id="submitBtn" disabled>Generate Button with AI</button>
 			</div>
 
 			<div class="tips-section">
@@ -480,7 +641,7 @@ export class AIButtonDescriptionPanel {
 					<li><strong>Mention inputs:</strong> If you need user input, describe it (e.g., "with a custom message", "ask for environment name")</li>
 					<li><strong>Describe workflow:</strong> For complex tasks, explain the sequence (e.g., "first build, then deploy")</li>
 					<li><strong>Specify scope:</strong> For workspace buttons, mention project-specific paths or files</li>
-					<li><strong>For scripts:</strong> Use phrases like "create a script" for multi-step complex workflows</li>
+					<li><strong>For shell/batch scripts:</strong> Use phrases like "create a script" for multi-step complex workflows</li>
 				</ul>
 			</div>
 
@@ -492,14 +653,14 @@ export class AIButtonDescriptionPanel {
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"<span class="json-emoji">📋</span> Export File List"</span><span class="json-punctuation">,</span>
     <span class="json-key">"execDir"</span><span class="json-punctuation">:</span> <span class="json-string">"&lt;workspace&gt;"</span><span class="json-punctuation">,</span>
     <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"ls -la > files_list.txt"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"ai_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Exports detailed file listing to files_list.txt"</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Exports detailed file listing to files_list.txt"</span>
   <span class="json-punctuation">},</span>
   <span class="json-punctuation">{</span>
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"<span class="json-emoji">🧹</span> Clear Terminal"</span><span class="json-punctuation">,</span>
     <span class="json-key">"execDir"</span><span class="json-punctuation">:</span> <span class="json-string">"."</span><span class="json-punctuation">,</span>
     <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"clear"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"ai_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Clears the terminal screen"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"user_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Button to clear terminal"</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Clears the terminal screen"</span><span class="json-punctuation">,</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Button to clear terminal"</span>
   <span class="json-punctuation">},</span>
   <span class="json-punctuation">{</span>
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"Create File"</span><span class="json-punctuation">,</span>
@@ -511,15 +672,15 @@ export class AIButtonDescriptionPanel {
         <span class="json-key">"variable"</span><span class="json-punctuation">:</span> <span class="json-string">"{file}"</span>
       <span class="json-punctuation">}</span>
     <span class="json-punctuation">]</span><span class="json-punctuation">,</span>
-    <span class="json-key">"user_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Create a new file"</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Create a new file"</span>
   <span class="json-punctuation">},</span>
   <span class="json-punctuation">{</span>
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"<span class="json-emoji">🐛</span> Run Tests"</span><span class="json-punctuation">,</span>
     <span class="json-key">"execDir"</span><span class="json-punctuation">:</span> <span class="json-string">"&lt;workspace&gt;/tests"</span><span class="json-punctuation">,</span>
     <span class="json-key">"scriptFile"</span><span class="json-punctuation">:</span> <span class="json-string">"_run_tests.sh"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\"&lt;workspace&gt;/.vscode/devBoost/scripts/_run_tests.sh\""</span><span class="json-punctuation">,</span>
-    <span class="json-key">"ai_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Runs test suite using custom script"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"user_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Button to run tests with custom script"</span>
+    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\\"&lt;workspace&gt;/.vscode/devBoost/scripts/_run_tests.sh\\""</span><span class="json-punctuation">,</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Runs test suite using custom script"</span><span class="json-punctuation">,</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Button to run tests with custom script"</span>
   <span class="json-punctuation">},</span>
   <span class="json-punctuation">{</span>
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"<span class="json-emoji">🚀</span> Deploy with Params"</span><span class="json-punctuation">,</span>
@@ -536,16 +697,11 @@ export class AIButtonDescriptionPanel {
         <span class="json-key">"variable"</span><span class="json-punctuation">:</span> <span class="json-string">"{version}"</span>
       <span class="json-punctuation">}</span>
     <span class="json-punctuation">]</span><span class="json-punctuation">,</span>
-    <span class="json-key">"ai_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Deploys application to specified environment"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"user_description"</span><span class="json-punctuation">:</span> <span class="json-string">"Deploy with environment and version inputs"</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Deploys application to specified environment"</span><span class="json-punctuation">,</span>
+    <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Deploy with environment and version inputs"</span>
   <span class="json-punctuation">}</span>
 <span class="json-punctuation">]</span></code></pre>
 				</div>
-			</div>
-
-			<div class="button-group">
-				<button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
-				<button type="submit" class="btn-primary" id="submitBtn" disabled>Generate Button with AI</button>
 			</div>
 		</form>
 	</div>
@@ -560,6 +716,55 @@ export class AIButtonDescriptionPanel {
 		const descriptionError = document.getElementById('descriptionError');
 		const charCount = document.getElementById('charCount');
 		const examples = document.querySelectorAll('.example');
+		const loaderOverlay = document.getElementById('loaderOverlay');
+		const errorOverlay = document.getElementById('errorOverlay');
+		const errorMessage = document.getElementById('errorMessage');
+		const errorCloseBtn = document.getElementById('errorCloseBtn');
+
+		// Restore saved state if available
+		const vscodeState = vscode.getState();
+		if (vscodeState) {
+			if (vscodeState.description !== undefined) {
+				descriptionTextarea.value = vscodeState.description;
+				updateCharCount();
+				validateDescription();
+			}
+			if (vscodeState.scope !== undefined) {
+				scopeSelect.value = vscodeState.scope;
+			}
+		}
+
+		// Save state whenever form values change
+		function saveState() {
+			vscode.setState({
+				description: descriptionTextarea.value,
+				scope: scopeSelect.value
+			});
+		}
+
+		// Listen for messages from VS Code
+		window.addEventListener('message', event => {
+			const message = event.data;
+			
+			if (message.command === 'showLoading') {
+				loaderOverlay.classList.add('show');
+				submitBtn.disabled = true;
+				cancelBtn.disabled = true;
+			} else if (message.command === 'showError') {
+				loaderOverlay.classList.remove('show');
+				errorMessage.textContent = message.error || 'An error occurred while generating the button.';
+				errorOverlay.classList.add('show');
+				submitBtn.disabled = false;
+				cancelBtn.disabled = false;
+			}
+		});
+
+		// Handle error close button
+		errorCloseBtn.addEventListener('click', () => {
+			errorOverlay.classList.remove('show');
+			// Close the webview panel
+			vscode.postMessage({ command: 'cancel' });
+		});
 
 		// Handle example clicks
 		examples.forEach(example => {
@@ -613,7 +818,10 @@ export class AIButtonDescriptionPanel {
 		descriptionTextarea.addEventListener('input', () => {
 			validateDescription();
 			updateCharCount();
+			saveState();
 		});
+
+		scopeSelect.addEventListener('change', saveState);
 
 		cancelBtn.addEventListener('click', () => {
 			vscode.postMessage({ command: 'cancel' });

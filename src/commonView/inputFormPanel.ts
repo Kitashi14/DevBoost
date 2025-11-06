@@ -35,7 +35,7 @@ export class InputFormPanel {
 				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
 				{
 					enableScripts: true,
-					retainContextWhenHidden: false
+					retainContextWhenHidden: true
 				}
 			);
 
@@ -363,6 +363,25 @@ export class InputFormPanel {
 			inputs[id] = document.getElementById(id);
 		});
 
+		// Restore saved state if available
+		const vscodeState = vscode.getState();
+		if (vscodeState) {
+			fieldIds.forEach(id => {
+				if (vscodeState[id] !== undefined) {
+					inputs[id].value = vscodeState[id];
+				}
+			});
+		}
+
+		// Save state whenever form values change
+		function saveState() {
+			const state = {};
+			fieldIds.forEach(id => {
+				state[id] = inputs[id].value;
+			});
+			vscode.setState(state);
+		}
+
 		// Validate a single field
 		function validateField(fieldId) {
 			const input = inputs[fieldId];
@@ -402,6 +421,7 @@ export class InputFormPanel {
 			inputs[id].addEventListener('input', () => {
 				validateField(id);
 				updateSubmitButton();
+				saveState();
 			});
 		});
 

@@ -15,14 +15,12 @@ export class ButtonFormPanel {
 				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
 				{
 					enableScripts: true,
-					retainContextWhenHidden: false
+					retainContextWhenHidden: true
 				}
 			);
 
 			// Get default execDir based on scope
-			const defaultExecDir = scope === 'workspace' && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
-				? vscode.workspace.workspaceFolders[0].uri.fsPath
-				: '.';
+			const defaultExecDir = '<workspace>';
 
 			panel.webview.html = this.getHtmlContent(panel.webview, defaultExecDir, scope);
 
@@ -34,7 +32,7 @@ export class ButtonFormPanel {
 						const button: smartCmdButton & { selectedScope: 'workspace' | 'global' } = {
 							name: message.data.name,
 							cmd: message.data.cmd,
-							user_description: message.data.description || undefined,
+							description: message.data.description || undefined,
 							inputs: message.data.inputs && message.data.inputs.length > 0 ? message.data.inputs : undefined,
 							execDir: message.data.execDir || '.',
 							selectedScope: message.data.scope as 'workspace' | 'global'
@@ -266,7 +264,7 @@ export class ButtonFormPanel {
 </head>
 <body>
 	<div class="container">
-		<h1>Create Custom Button Manually</h1>
+		<h1>Create Custom Button Manual Form</h1>
 		
 		<form id="buttonForm">
 			<div class="form-group">
@@ -280,7 +278,7 @@ export class ButtonFormPanel {
 			
 			<div class="form-group">
 				<label for="name">Button Name<span class="required">*</span></label>
-				<input type="text" id="name" maxlength="50" placeholder="e.g., Deploy to Production">
+				<input type="text" id="name" maxlength="50" placeholder="e.g., Start Server">
 				<div class="error-message" id="nameError"></div>
 			</div>
 
@@ -292,15 +290,15 @@ export class ButtonFormPanel {
 
 			<div class="form-group">
 				<label for="execDir">Execution Directory</label>
-				<input type="text" id="execDir" value="${defaultExecDir}" placeholder="e.g., ./src, /usr/local/bin, etc.">
-				<div class="hint">Directory where the command will be executed (e.g. ./src, /usr/local/bin, . (current directory), etc.)</div>
+				<input type="text" id="execDir" value="${defaultExecDir}">
+				<div class="hint">Directory where the command will be executed (e.g. &lt;workspace&gt;, &lt;workspace&gt;/src, /usr/local/bin, . (current directory), etc.)</div>
 			</div>
 
 			<div class="form-group">
 				<label for="cmd">Command<span class="required">*</span></label>
-				<textarea id="cmd" placeholder="e.g., git commit -m '{message}' or npm test"></textarea>
+				<textarea id="cmd" placeholder="cmd to be executed in terminal (e.g. npm run, git status && ls -l)"></textarea>
 				<div class="error-message" id="cmdError"></div>
-				<div class="hint">Use {variableName} for dynamic inputs</div>
+				<div class="hint">Use {variableName} for dynamic inputs (e.g., git commit -m '{message}')</div>
 			</div>
 
 			<div id="placeholderSection" style="display: none;">
@@ -334,6 +332,27 @@ export class ButtonFormPanel {
 		const placeholderInputs = document.getElementById('placeholderInputs');
 
 		let currentVariables = [];
+
+		// Restore saved state if available
+		const vscodeState = vscode.getState();
+		if (vscodeState) {
+			if (vscodeState.scope !== undefined) scopeInput.value = vscodeState.scope;
+			if (vscodeState.name !== undefined) nameInput.value = vscodeState.name;
+			if (vscodeState.description !== undefined) descriptionInput.value = vscodeState.description;
+			if (vscodeState.execDir !== undefined) execDirInput.value = vscodeState.execDir;
+			if (vscodeState.cmd !== undefined) cmdInput.value = vscodeState.cmd;
+		}
+
+		// Save state whenever form values change
+		function saveState() {
+			vscode.setState({
+				scope: scopeInput.value,
+				name: nameInput.value,
+				description: descriptionInput.value,
+				execDir: execDirInput.value,
+				cmd: cmdInput.value
+			});
+		}
 
 		// Validate name
 		function validateName() {
@@ -433,11 +452,18 @@ export class ButtonFormPanel {
 		}
 
 		// Event listeners
-		nameInput.addEventListener('input', updateValidation);
-		cmdInput.addEventListener('input', () => {
-			validateCmd();
-			detectVariables();
+		nameInput.addEventListener('input', () => {
+			updateValidation();
+			saveState();
 		});
+		cmdInput.addEventListener('input', () => {
+			detectVariables();
+			updateValidation();
+			saveState();
+		});
+		descriptionInput.addEventListener('input', saveState);
+		execDirInput.addEventListener('input', saveState);
+		scopeInput.addEventListener('change', saveState);
 
 		cancelBtn.addEventListener('click', () => {
 			vscode.postMessage({ command: 'cancel' });
@@ -476,7 +502,8 @@ export class ButtonFormPanel {
 			});
 		});
 
-		// Initial validation
+		// Initial validation and variable detection
+		detectVariables();
 		updateValidation();
 		
 		// Focus on name input

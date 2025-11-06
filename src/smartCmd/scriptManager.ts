@@ -214,6 +214,14 @@ export function createScriptContent(
 	
 	// Replace input variable placeholders with positional argument references
 	let processedCommands = commands;
+
+	// Check if script content is already processed (has shebang or @echo off)
+	const firstLine = processedCommands.split('\n')[0].trim();
+	const containsSheBangOrEcho = firstLine?.startsWith('#!') || firstLine?.startsWith('@echo') || false;
+	if(containsSheBangOrEcho){
+		//remove first line from processedCommands
+		processedCommands = processedCommands.split('\n').slice(1).join('\n');
+	}
 	if (inputs && inputs.length > 0) {
 		inputs.forEach((input, index) => {
 			const argNum = index + 1;
@@ -230,7 +238,7 @@ export function createScriptContent(
 		// Windows batch file
 		let content = '@echo off\n';
 		if (description) {
-			content += `REM ${description}\n`;
+			content += `REM Description: ${description}\n`;
 		}
 		
 		// Add input arguments documentation
@@ -252,7 +260,7 @@ export function createScriptContent(
 		// Unix shell script
 		let content = '#!/usr/bin/env bash\n';
 		if (description) {
-			content += `# ${description}\n`;
+			content += `# Description: ${description}\n`;
 		}
 		
 		// Add input arguments documentation
@@ -294,8 +302,8 @@ export async function processButtonWithScript(
 		const scriptFileName = button.scriptFile || generateScriptFileName(button.name, existingScripts);
 		
 		// Check if script content is already processed (has shebang or @echo off)
-        const firstLine = button.scriptContent.split('\n')[0].trim();
-        const isAlreadyProcessed = firstLine.startsWith('#!/') || firstLine.startsWith('@echo off');
+        const SecondLine = button.scriptContent.split('\n')[1].trim();
+        const isAlreadyProcessed = SecondLine?.startsWith('# Description:') || SecondLine?.startsWith('REM Description:') || false;
         
         let scriptContent: string;
         if (isAlreadyProcessed) {
@@ -307,7 +315,7 @@ export async function processButtonWithScript(
             // Pass inputs for argument documentation
             scriptContent = createScriptContent(
                 button.scriptContent,
-                button.ai_description || button.user_description,
+                button.description,
                 button.inputs
             );
         }

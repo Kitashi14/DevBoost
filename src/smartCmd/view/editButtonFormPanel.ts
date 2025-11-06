@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { smartCmdButton, InputField } from '../treeProvider';
+import { smartCmdButton, InputField, SmartCmdButtonTreeItem } from '../treeProvider';
 
 export class EditButtonFormPanel {
 	/**
@@ -15,7 +15,7 @@ export class EditButtonFormPanel {
 				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
 				{
 					enableScripts: true,
-					retainContextWhenHidden: false
+					retainContextWhenHidden: true
 				}
 			);
 
@@ -24,7 +24,14 @@ export class EditButtonFormPanel {
 			// Handle messages from the webview
 			panel.webview.onDidReceiveMessage(
 				message => {
-					if (message.command === 'submit') {
+					if (message.command === 'openScript') {
+						// Create a tree item and call the existing command
+						const treeItem = new SmartCmdButtonTreeItem(
+							button,
+							vscode.TreeItemCollapsibleState.None
+						);
+						vscode.commands.executeCommand('devboost.openScriptFile', treeItem);
+					} else if (message.command === 'submit') {
 						// Return the edited button data
 						const editedButton: smartCmdButton = {
 							...button, // Preserve original properties like scope, scriptFile, etc.
@@ -34,11 +41,9 @@ export class EditButtonFormPanel {
 							inputs: message.data.inputs && message.data.inputs.length > 0 ? message.data.inputs : undefined
 						};
 
-						// Update description based on whether it was AI-generated or user-provided
-						if (button.ai_description) {
-							editedButton.ai_description = message.data.description || undefined;
-						} else {
-							editedButton.user_description = message.data.description || undefined;
+						// Update description
+						if (button.description) {
+							editedButton.description = message.data.description || undefined;
 						}
 						
 						// Dispose panel with animation delay
@@ -68,8 +73,8 @@ export class EditButtonFormPanel {
 
 	private static getHtmlContent(webview: vscode.Webview, button: smartCmdButton): string {
 		// Get the current description
-		const currentDescription = button.ai_description || button.user_description || '';
-		const descriptionLabel = button.ai_description ? 'AI-Generated Description' : 'Description';
+		const currentDescription = button.description || '';
+		const descriptionLabel = 'Description';
 		const scopeLabel = button.scope === 'workspace' ? 'Workspace' : button.scope === 'global' ? 'Global' : 'Unknown';
 		
 		// Escape special characters for HTML
@@ -280,11 +285,50 @@ export class EditButtonFormPanel {
 			font-family: var(--vscode-editor-font-family);
 			margin-right: 6px;
 		}
+
+		.script-info {
+			background-color: var(--vscode-editor-inactiveSelectionBackground);
+			border: 1px solid var(--vscode-input-border);
+			border-radius: 4px;
+			padding: 14px;
+			margin-bottom: 18px;
+			animation: slideUp 0.3s ease-out;
+		}
+
+		.script-info h3 {
+			font-size: 14px;
+			font-weight: 600;
+			margin-bottom: 8px;
+			color: var(--vscode-foreground);
+			display: flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.script-filename {
+			font-family: var(--vscode-editor-font-family);
+			color: var(--vscode-textLink-foreground);
+			font-size: 13px;
+			margin-bottom: 10px;
+		}
+
+		.btn-open-script {
+			background-color: var(--vscode-button-secondaryBackground);
+			color: var(--vscode-button-secondaryForeground);
+			padding: 6px 12px;
+			font-size: 12px;
+		}
+
+		.btn-open-script:hover:not(:disabled) {
+			background-color: var(--vscode-button-secondaryHoverBackground);
+		}
 	</style>
 </head>
 <body>
 	<div class="container">
-		<h1>Edit Button: ${escapeHtml(button.name)}</h1>
+		<h2>Edit Button:</h2>
+		<br>
+		<h1>${escapeHtml(button.name)}</h1>
 		
 		<div class="form-group">
 			<label for="scope">Scope</label>
@@ -295,7 +339,7 @@ export class EditButtonFormPanel {
 		<form id="buttonForm">
 			<div class="form-group">
 				<label for="name">Button Name<span class="required">*</span></label>
-				<input type="text" id="name" maxlength="50" value="${escapeHtml(button.name)}" placeholder="e.g., Deploy to Production">
+				<input type="text" id="name" maxlength="50" value="${escapeHtml(button.name)}" placeholder="e.g., Start Server">
 				<div class="error-message" id="nameError"></div>
 			</div>
 
@@ -307,16 +351,23 @@ export class EditButtonFormPanel {
 
 			<div class="form-group">
 				<label for="execDir">Execution Directory</label>
-				<input type="text" id="execDir" value="${escapeHtml(button.execDir || '.')}" placeholder="e.g., ./src, /usr/local/bin, etc.">
-				<div class="hint">Directory where the command will be executed (e.g. ./src, /usr/local/bin, . (current directory), etc.)</div>
+				<input type="text" id="execDir" value="${escapeHtml(button.execDir || '.')}">
+				<div class="hint">Directory where the command will be executed (e.g. &lt;workspace&gt;, &lt;workspace&gt;/src, /usr/local/bin, . (current directory), etc.)</div>
 			</div>
 
 			<div class="form-group">
 				<label for="cmd">Command<span class="required">*</span></label>
-				<textarea id="cmd" placeholder="e.g., git commit -m '{message}' or npm test">${escapeHtml(button.cmd)}</textarea>
+				<textarea id="cmd" placeholder="cmd to be executed in terminal (e.g. npm run, git status && ls -l)">${escapeHtml(button.cmd)}</textarea>
 				<div class="error-message" id="cmdError"></div>
-				<div class="hint">Use {variableName} for dynamic inputs</div>
+				<div class="hint">Use {variableName} for dynamic inputs (eg. git commit -m '{message}')</div>
 			</div>
+			${button.scriptFile ? `
+			<div class="script-info">
+				<h3>📜 Script File</h3>
+				<div class="script-filename">${escapeHtml(button.scriptFile)}</div>
+				<button type="button" class="btn-open-script" id="openScriptBtn">Open Script File</button>
+			</div>
+			` : ''}
 
 			<div id="placeholderSection" style="display: none;">
 				<div class="placeholder-section">
@@ -349,6 +400,33 @@ export class EditButtonFormPanel {
 
 		let currentVariables = [];
 		let existingInputs = ${existingInputsJson};
+
+		// Restore saved state if available
+		const vscodeState = vscode.getState();
+		if (vscodeState) {
+			if (vscodeState.name !== undefined) nameInput.value = vscodeState.name;
+			if (vscodeState.description !== undefined) descriptionInput.value = vscodeState.description;
+			if (vscodeState.execDir !== undefined) execDirInput.value = vscodeState.execDir;
+			if (vscodeState.cmd !== undefined) cmdInput.value = vscodeState.cmd;
+		}
+
+		// Save state whenever form values change
+		function saveState() {
+			vscode.setState({
+				name: nameInput.value,
+				description: descriptionInput.value,
+				execDir: execDirInput.value,
+				cmd: cmdInput.value
+			});
+		}
+
+		// Handle open script button if present
+		const openScriptBtn = document.getElementById('openScriptBtn');
+		if (openScriptBtn) {
+			openScriptBtn.addEventListener('click', () => {
+				vscode.postMessage({ command: 'openScript' });
+			});
+		}
 
 		// Validate name
 		function validateName() {
@@ -454,11 +532,17 @@ export class EditButtonFormPanel {
 		}
 
 		// Event listeners
-		nameInput.addEventListener('input', updateValidation);
+		nameInput.addEventListener('input', () => {
+			updateValidation();
+			saveState();
+		});
 		cmdInput.addEventListener('input', () => {
 			validateCmd();
 			detectVariables();
+			saveState();
 		});
+		descriptionInput.addEventListener('input', saveState);
+		execDirInput.addEventListener('input', saveState);
 
 		cancelBtn.addEventListener('click', () => {
 			vscode.postMessage({ command: 'cancel' });

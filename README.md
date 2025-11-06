@@ -406,8 +406,8 @@ When clicked, the button prompts for a commit message before executing.
   {
     "name": "🧪 Run Tests",
     "cmd": "npm test",
-    "user_description": "Run all unit tests",
-    "ai_description": "Executes the test suite using npm test command",
+    "user_prompt": "Run all unit tests",
+    "description": "Executes the test suite using npm test command",
     "execDir": ".",
     "inputs": []
   }
@@ -421,8 +421,8 @@ When clicked, the button prompts for a commit message before executing.
   "execDir": ".",
   "cmd": "<path-to-scripts>/deploy-production.sh",
   "scriptFile": "deploy-production.sh",
-  "user_description": "Deploy to production",
-  "ai_description": "Builds, tests, and deploys application to production environment",
+  "user_prompt": "Deploy to production",
+  "description": "Builds, tests, and deploys application to production environment",
   "inputs": [
     {
       "placeholder": "Enter environment (staging/production)",

@@ -132,15 +132,17 @@ export async function checkDuplicateButton(
 		const model = models[0];
 
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
-			const desc = b.ai_description || b.user_description || 'N/A';
-			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", Scope: ${b.scope}`;
+			const desc = b.description || 'N/A';
+			const user_prompt = b.user_prompt || 'N/A';
+			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}`;
 		}).join('\n');
 
 		const scopeContext = targetScope === 'global'
 			? 'This button will be available globally (in all projects).'
 			: 'This button will be available in the current workspace. Checking against both global and workspace buttons.';
 
-		const newButtonDesc = newButton.ai_description || newButton.user_description || 'N/A';
+		const newButtonDesc = newButton.description || 'N/A';
+		const newUserPrompt = newButton.user_prompt || 'N/A';
 
 		const prompt = `Compare this new button with existing buttons and determine if it's a duplicate.
 		
@@ -149,6 +151,7 @@ New Button (Target Scope: ${targetScope}):
 - Exec Dir: "${newButton.execDir && newButton.execDir.trim() !== '' ? newButton.execDir : '.'}"
 - Command: "${newButton.cmd}"
 - Description: "${newButtonDesc}"
+- User Prompt: "${newUserPrompt}"
 
 ${scopeContext}
 
@@ -166,7 +169,8 @@ Don't consider buttons as duplicates if they:
 2. Have specific tasks assigned to it even if a similar command exists
 3. Execute commands in different directories that change their context significantly
 
-If it's a duplicate/similar, respond with JSON containing the existing button's details:
+NOTE:
+If it's a duplicate/similar, respond with only JSON containing the existing button's details:
 {"name": "🔨 Build Project", "execDir": "./backend", "cmd": "npm run build", "scope": "workspace"}
 
 If it's unique, respond with only "UNIQUE".`;
@@ -261,8 +265,8 @@ Button Details:
 - Name: "${button.name}"
 - Exec Dir: "${button.execDir && button.execDir.trim() !== '' ? button.execDir : '.'}"
 - Command: "${button.cmd}"
-- User Description: "${button.user_description || 'N/A'}"
-- AI Description: "${button.ai_description || 'N/A'}"
+- Description: "${button.description || 'N/A'}"
+- User Prompt: "${button.user_prompt || 'N/A'}"
 
 A button is WORKSPACE-SPECIFIC if it:
 1. Uses RELATIVE paths that is not generic directory like current directory and reference project structure (e.g., ./src/build.sh, ../config/setup.js, npm run custom-script)
@@ -455,13 +459,13 @@ ${platform === 'macOS' || platform === 'Linux' ? '• Use && for chaining, Unix 
 🚨 CRITICAL RULE - EMOJIS:
 • ONLY use emoji/icon in the "name" field at the beginning (e.g., "🚀 Build Project")
 • NEVER use emojis, icons, or special characters in the "cmd" or "scriptContent" fields - plain text only
-• NEVER use emojis, icons, or special characters in the "ai_description" field
+• NEVER use emojis, icons, or special characters in the "description" field
 • These fields are executed directly in the terminal - any emoji will cause execution failure
 
 Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
-3. A brief description of what the button does (this will be stored as ai_description) - NO EMOJIS
+3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
 4. If the command needs user input, include input fields with placeholders (use {variableName} format)
 5. execDir: where to run from (applies to both cmd and scriptContent)
 
@@ -473,13 +477,13 @@ SIMPLE COMMAND CHAIN FORMAT:
         "name": "🚀 Build and Deploy",
         "execDir": "<workspace>/subdirectory",
         "cmd": "npm run build && npm run deploy && cd /path/to/other && ./deploy.sh",
-        "ai_description": "Automates the build and deploy workflow pattern"
+        "description": "Automates the build and deploy workflow pattern"
     },
 	{
         "name": "🚀 List all files in current directory",
         "execDir": ".",
         "cmd": "ls -la",
-        "ai_description": "Lists all files in the current directory"
+        "description": "Lists all files in the current directory"
     }
 ]
 
@@ -489,7 +493,7 @@ SCRIPT FORMAT (for complex workflows):
         "name": "🚀 Multi-Service Setup",
         "execDir": "<workspace>",
         "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
-        "ai_description": "Sets up frontend, backend, and starts Docker services"
+        "description": "Sets up frontend, backend, and starts Docker services"
     }
 ]
 
@@ -499,7 +503,7 @@ WITH INPUT FIELDS - COMMAND FORMAT:
         "name": "📝 Git Commit & Push",
         "execDir": "<workspace>",
         "cmd": "git add . && git commit -m '{message}' && git push",
-        "ai_description": "Stages changes, commits with custom message, and pushes to remote",
+        "description": "Stages changes, commits with custom message, and pushes to remote",
         "inputs": [
             {
                 "placeholder": "Enter commit message",
@@ -511,7 +515,7 @@ WITH INPUT FIELDS - COMMAND FORMAT:
         "name": "🐳 Docker Execute",
         "execDir": "<workspace>/path/to/context",
         "cmd": "docker exec -it {container} {command}",
-        "ai_description": "Execute command inside a Docker container",
+        "description": "Execute command inside a Docker container",
         "inputs": [
             {
                 "placeholder": "Container name",
@@ -531,7 +535,7 @@ WITH INPUT FIELDS - SCRIPT FORMAT:
         "name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
         "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi",
-        "ai_description": "Builds project and deploys to specified environment with error checking",
+        "description": "Builds project and deploys to specified environment with error checking",
         "inputs": [
             {
                 "placeholder": "Environment (dev/staging/prod)",
@@ -548,8 +552,20 @@ WRONG FORMAT (DO NOT DO THIS):
         "execDir": "cd /path/to/project",  ❌ ExecDir should be just the path, no commands
         OR "execDir": "/absolute/path/to/workspace",  ❌ Use <workspace> instead of absolute paths
         "cmd": "cd project && make msim_main || echo '❌ Build failed'",  ❌ NO EMOJIS IN CMD!
-        "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
-    }
+        "description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
+    },
+	{
+		"name": "🚀 Deploy to Environment",
+        "execDir": "<workspace>",
+        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script
+        "description": "Builds project and deploys to specified environment with error checking",		
+        "inputs": [
+            {
+                "placeholder": "Environment (dev/staging/prod)",
+                "variable": "{env}"
+            }
+        ]
+	}
 ]
 
 Analyze the sequential logs carefully and generate 3-5 buttons that automate the ACTUAL workflows you observe.
@@ -666,7 +682,8 @@ ${platform === 'macOS' || platform === 'Linux' ? '- Use Unix/Linux-compatible co
 🔄 WHEN TO USE SCRIPTS VS COMMAND CHAINS:
 
 USE SCRIPT (scriptContent field) when the task requires:
-• When asked to generate script
+• When asked to generate or create script
+• When asked to generate or create script **file** then don't create a script to generate a seperate script file rather create the actual script directly in scriptContent
 • Multiple directory changes between commands
 • Complex error handling and conditional logic
 • Loops, variables, or advanced shell features
@@ -684,16 +701,16 @@ USE COMMAND CHAIN (cmd field) when the task is:
 🚨 CRITICAL RULE - EMOJIS:
 • ONLY use emoji/icon in the "name" field at the beginning (e.g., "🚀 Build Project")
 • NEVER use emojis, icons, or special characters in the "cmd" or "scriptContent" fields - plain text only
-• NEVER use emojis, icons, or special characters in the "ai_description" field
+• NEVER use emojis, icons, or special characters in the "description" field
 • These fields are executed directly in the terminal - any emoji will cause execution failure
 
 Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
-3. A brief description of what the button does (this will be stored as ai_description) - NO EMOJIS
+3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
 4. If the command needs user input, include input fields with placeholders (use {variableName} format)
 
-The user provided this description: "${description}" (this will be stored as user_description)
+The user provided this description: "${description}" (this will be stored as user_prompt)
 
 CORRECT FORMAT:
 WITHOUT INPUT FIELDS WITH GENERIC EXECUTION PATH - COMMAND:
@@ -701,7 +718,7 @@ WITHOUT INPUT FIELDS WITH GENERIC EXECUTION PATH - COMMAND:
     "name": "🔨 Build Project",
     "execDir": "<workspace>",
     "cmd": "npm run build",
-    "ai_description": "Builds the project using npm"
+    "description": "Builds the project using npm"
 }
 
 WITHOUT INPUT FIELDS WITH ANY POSSIBLE EXECUTION PATH - COMMAND:
@@ -709,7 +726,7 @@ WITHOUT INPUT FIELDS WITH ANY POSSIBLE EXECUTION PATH - COMMAND:
     "name": "🚀 List all files in current directory",
 	"execDir": ".",
     "cmd": "ls -la",
-    "ai_description": "Lists all files in the current directory"
+    "description": "Lists all files in the current directory"
 }
 
 WITH INPUT FIELDS - COMMAND:
@@ -717,7 +734,7 @@ WITH INPUT FIELDS - COMMAND:
     "name": "📝 Git Commit",
 	"execDir": "<workspace>",
     "cmd": "git add . && git commit -m '{message}'",
-    "ai_description": "Stage all changes and commit with a custom message",
+    "description": "Stage all changes and commit with a custom message",
     "inputs": [
         {
             "placeholder": "Enter commit message",
@@ -730,7 +747,7 @@ COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
     "name": "🔧 Multi-Service Setup",
 	"execDir": "<workspace>",
     "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
-    "ai_description": "Sets up frontend, backend, and starts Docker services"
+    "description": "Sets up frontend, backend, and starts Docker services"
 }
 
 WITH INPUT FIELDS - SCRIPT:
@@ -738,16 +755,30 @@ WITH INPUT FIELDS - SCRIPT:
     "name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
     "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
-    "ai_description": "Builds and deploys to specified environment with error checking",
+    "description": "Builds and deploys to specified environment with error checking",
     "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
 }
 
-WRONG FORMAT (DO NOT DO THIS):
+WRONG FORMAT - COMMAND (DO NOT DO THIS):
 {
     "name": "Build Project",  ❌ Missing emoji in name
 	"execDir": "cd /path",  ❌ ExecDir should be just the path, no commands
     "cmd": "npm run build || echo '❌ Failed'",  ❌ NO EMOJIS IN CMD!
-    "ai_description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
+    "description": "Builds the project ✅"  ❌ NO EMOJIS IN DESCRIPTION!
+}
+
+WRONG FORMAT - SCRIPT
+{
+	"name": "🚀 Deploy to Environment",
+	"execDir": "<workspace>",
+	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script
+	"description": "Builds project and deploys to specified environment with error checking",		
+	"inputs": [
+		{
+			"placeholder": "Environment (dev/staging/prod)",
+			"variable": "{env}"
+		}
+	]
 }
 
 Only respond with the JSON object, no additional text.`;
@@ -784,8 +815,8 @@ Only respond with the JSON object, no additional text.`;
 				const jsonString = cleanedResponse.substring(firstBrace, lastBrace + 1);
 				const button = JSON.parse(jsonString) as smartCmdButton;
 				
-				if (button.name && (button.cmd || button.scriptContent) && button.ai_description) {
-					button.user_description = description;
+				if (button.name && (button.cmd || button.scriptContent) && button.description) {
+					button.user_prompt = description;
 					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
 					console.log('Successfully parsed button:', button);
 					return button;
@@ -795,18 +826,15 @@ Only respond with the JSON object, no additional text.`;
 			console.error('JSON parsing error:', parseError);
 		}
 
-		vscode.window.showInformationMessage('Could not parse AI response. Please enter button details manually.');
-		return null;
+		throw new Error('Could not parse AI response into a valid button format. Please enter button details manually.');
 
 	} catch (err) {
 		if (err instanceof vscode.LanguageModelError) {
 			console.log('Language Model Error:', err.message, err.code);
-			vscode.window.showInformationMessage(`AI suggestion failed: ${err.message}. Please enter manually.`);
 		} else {
 			console.error('Unexpected error getting custom button suggestion:', err);
-			vscode.window.showInformationMessage('AI suggestion failed. Please enter button details manually.');
 		}
-		return null;
+		throw new Error('AI suggestion failed. \n' + (err instanceof Error ? err.message : 'Unknown error') + ' \nYou can also create button manually.');
 	}
 }
 
@@ -821,7 +849,7 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 		buttons.push({
 			name: '📝 Git Commit',
 			cmd: 'git add . && git commit -m \'{message}\'',
-			ai_description: 'Stage all changes and commit with a custom message',
+			description: 'Stage all changes and commit with a custom message',
 			inputs: [
 				{
 					placeholder: 'Enter commit message',
@@ -832,7 +860,7 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 		buttons.push({
 			name: '🚀 Git Push',
 			cmd: 'git push',
-			ai_description: 'Push commits to remote repository'
+			description: 'Push commits to remote repository'
 		});
 	}
 
@@ -840,7 +868,7 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 		buttons.push({
 			name: '🔨 Build',
 			cmd: 'npm run build',
-			ai_description: 'Build the project using npm'
+			description: 'Build the project using npm'
 		});
 	}
 
@@ -848,7 +876,7 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 		buttons.push({
 			name: '🧪 Run Tests',
 			cmd: 'npm test',
-			ai_description: 'Run all tests in the project'
+			description: 'Run all tests in the project'
 		});
 	}
 
@@ -856,7 +884,7 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 		buttons.push({
 			name: '💾 Save All',
 			cmd: 'workbench.action.files.saveAll',
-			ai_description: 'Save all open files'
+			description: 'Save all open files'
 		});
 	}
 
@@ -865,17 +893,17 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 			{
 				name: '🔨 Build',
 				cmd: 'npm run build',
-				ai_description: 'Build the project'
+				description: 'Build the project'
 			},
 			{
 				name: '🧪 Test',
 				cmd: 'npm test',
-				ai_description: 'Run tests'
+				description: 'Run tests'
 			},
 			{
 				name: '📝 Commit',
 				cmd: 'git add . && git commit -m \'{message}\'',
-				ai_description: 'Commit changes with a message',
+				description: 'Commit changes with a message',
 				inputs: [
 					{
 						placeholder: 'Enter commit message',

@@ -12,7 +12,7 @@ export async function activateSmartCmd(
 	activityLogPath: string | undefined,
 ): Promise<void> {
 	// Initialize SmartCmd paths
-	const globalButtonsPath = path.join(globalStoragePath, 'global-buttons.json');
+	const globalButtonsPath = path.join(globalStoragePath, 'global-smartCmd.json');
 
 	// Ensure global buttons file exists
 	try {
@@ -243,7 +243,7 @@ async function getButtonCount(scope: 'workspace' | 'global', globalStoragePath?:
 			if (!globalStoragePath) {
 				return 0;
 			}
-			buttonsFilePath = path.join(globalStoragePath, 'global-buttons.json');
+			buttonsFilePath = path.join(globalStoragePath, 'global-smartCmd.json');
 		} else {
 			if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 				return 0;

@@ -3,7 +3,7 @@
     {
       "name": "SmartCmd Example: System Info",
       "cmd": "uname -a && echo '' && echo 'Node version:' && node --version && echo 'NPM version:' && npm --version",
-      "ai_description": "Display system information including OS, Node.js and NPM versions",
+      "description": "Display system information including OS, Node.js and NPM versions",
       "execDir": "."
     }
   ],
@@ -11,14 +11,14 @@
     {
       "name": "SmartCmd Example: Git Status & Log",
       "cmd": "git status && echo '====================' && git log --oneline -5",
-      "ai_description": "Show current git status and last 5 commits in a single view",
+      "description": "Show current git status and last 5 commits in a single view",
       "execDir": "<workspace>"
     },
     {
       "name": "SmartCmd Example: Test with User Input",
       "cmd": "",
       "scriptFile": "example_greeting.sh",
-      "ai_description": "Example script that demonstrates input fields and argument passing",
+      "description": "Example script that demonstrates input fields and argument passing",
       "execDir": "<workspace>",
       "inputs": [
         {
