@@ -1,18 +1,21 @@
 import * as vscode from 'vscode';
 import { smartCmdButton, InputField, SmartCmdButtonTreeItem } from '../treeProvider';
+import { getScriptsDir } from '../scriptManager';
+import * as path from 'path';
 
 export class EditButtonFormPanel {
 	/**
 	 * Show a form to edit an existing button
 	 * @param button The button to edit
+	 * @param globalStoragePath The global storage path 
 	 * @returns Promise resolving to edited smartCmdButton or null if cancelled
 	 */
-	public static async show(button: smartCmdButton): Promise<smartCmdButton | null> {
+	public static async show(button: smartCmdButton, globalStoragePath?: string): Promise<smartCmdButton | null> {
 		return new Promise<smartCmdButton | null>((resolve) => {
 			const panel = vscode.window.createWebviewPanel(
 				'editButtonForm',
 				'Edit Button',
-				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
+				{ viewColumn: vscode.ViewColumn.Two, preserveFocus: false },
 				{
 					enableScripts: true,
 					retainContextWhenHidden: true
@@ -23,14 +26,21 @@ export class EditButtonFormPanel {
 
 			// Handle messages from the webview
 			panel.webview.onDidReceiveMessage(
-				message => {
+				async message => {
 					if (message.command === 'openScript') {
-						// Create a tree item and call the existing command
-						const treeItem = new SmartCmdButtonTreeItem(
-							button,
-							vscode.TreeItemCollapsibleState.None
-						);
-						vscode.commands.executeCommand('devboost.openScriptFile', treeItem);
+						if(button.scope && globalStoragePath && button.scriptFile) {
+						const scriptsDir = getScriptsDir(button.scope, globalStoragePath);
+							if (!scriptsDir) {
+								return null;
+							}
+							const scriptFilePath = path.join(scriptsDir, button.scriptFile);
+							try {
+								const doc = await vscode.workspace.openTextDocument(scriptFilePath);
+								await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, preview: false });
+							} catch (error) {
+								vscode.window.showErrorMessage(`Failed to open script: ${error instanceof Error ? error.message : 'Unknown error'}`);
+							}
+						}
 					} else if (message.command === 'submit') {
 						// Return the edited button data
 						const editedButton: smartCmdButton = {
@@ -346,7 +356,7 @@ export class EditButtonFormPanel {
 			<div class="form-group">
 				<label for="description">${descriptionLabel}</label>
 				<input type="text" id="description" value="${escapeHtml(currentDescription)}" placeholder="Brief description of what this button does">
-				<div class="hint">Add a description to help identify this button</div>
+				<div class="hint">Add a description to help understand this button</div>
 			</div>
 
 			<div class="form-group">

@@ -53,6 +53,43 @@ export function generateScriptFileName(buttonName: string, existingFiles: string
 }
 
 /**
+ * Ensure a user-provided filename is unique by adding a counter if needed
+ * Preserves the original extension provided by the user
+ */
+export function ensureUniqueFileName(fileName: string, existingFiles: string[] = []): string {
+	// If filename is unique, return as is
+	console.log('Checking uniqueness for filename:', fileName);
+	console.log('Existing files:', existingFiles);
+	if (!existingFiles.includes(fileName)) {
+		return fileName;
+	}
+	
+	// Extract name and extension
+	const lastDotIndex = fileName.lastIndexOf('.');
+	let baseName: string;
+	let extension: string;
+	
+	if (lastDotIndex > 0) {
+		baseName = fileName.substring(0, lastDotIndex);
+		extension = fileName.substring(lastDotIndex); // includes the dot
+	} else {
+		baseName = fileName;
+		extension = '';
+	}
+	
+	// Add counter until we find a unique name
+	let counter = 1;
+	let uniqueName = `${baseName}_${counter}${extension}`;
+	
+	while (existingFiles.includes(uniqueName)) {
+		counter++;
+		uniqueName = `${baseName}_${counter}${extension}`;
+	}
+	
+	return uniqueName;
+}
+
+/**
  * Save script content to file
  */
 export async function saveScript(
@@ -156,7 +193,7 @@ export async function listScripts(
 		// Check if directory exists
 		await fs.access(scriptsDir);
 		const files = await fs.readdir(scriptsDir);
-		return files.filter(f => f.endsWith('.sh') || f.endsWith('.bat'));
+		return files;
 	} catch (error) {
 		// Directory doesn't exist or error reading
 		return [];
@@ -169,7 +206,6 @@ export async function listScripts(
 export function generateScriptCommand(
 	scriptFileName: string,
 	scope: 'workspace' | 'global',
-	execDir?: string,
 	globalStoragePath?: string,
 	inputs?: InputField[]
 ): string {
@@ -288,22 +324,29 @@ export function createScriptContent(
  */
 export async function processButtonWithScript(
 	button: smartCmdButton,
-	globalStoragePath?: string
+	globalStoragePath: string,
+	scope: 'workspace' | 'global'
 ): Promise<smartCmdButton | null> {
-	if (!button.scriptContent || !button.scope) {
+	if (!button.scriptContent || !scope) {
 		return button;
 	}
 	
 	try {
 		// Get existing script files to ensure unique name
-		const existingScripts = await listScripts(button.scope, globalStoragePath);
+		const existingScripts = await listScripts(scope, globalStoragePath);
 		
 		// Generate script filename
-		const scriptFileName = button.scriptFile || generateScriptFileName(button.name, existingScripts);
+		let scriptFileName: string;
+		if(button.scriptFile){
+			// Ensure provided scriptFile is unique
+			scriptFileName = ensureUniqueFileName(button.scriptFile, existingScripts);
+		}
+		else{
+			scriptFileName = generateScriptFileName(button.name, existingScripts);
+		}
 		
 		// Check if script content is already processed (has shebang or @echo off)
-        const SecondLine = button.scriptContent.split('\n')[1].trim();
-        const isAlreadyProcessed = SecondLine?.startsWith('# Description:') || SecondLine?.startsWith('REM Description:') || false;
+        const isAlreadyProcessed = button.cmd.trim() !== '';
         
         let scriptContent: string;
         if (isAlreadyProcessed) {
@@ -321,21 +364,62 @@ export async function processButtonWithScript(
         }
 		
 		// Save script file
-		const scriptPath = await saveScript(scriptContent, scriptFileName, button.scope, globalStoragePath);
+		const scriptPath = await saveScript(scriptContent, scriptFileName, scope, globalStoragePath);
 		
 		if (!scriptPath) {
 			console.error('DevBoost: Failed to save script file');
 			return null;
 		}
 		
-		// Generate command to run the script (pass inputs for placeholder appending)
-		const scriptCommand = generateScriptCommand(
-			scriptFileName, 
-			button.scope, 
-			button.execDir, 
-			globalStoragePath,
-			button.inputs
-		);
+		// Generate command to run the script
+		let scriptCommand: string;
+		
+		// Check if button already has a cmd (e.g., from manual creation or copying from workspace)
+		// If cmd exists and is not empty, it means the script was already parsed and has specific interpreter
+		if (button.cmd && button.cmd.trim() !== '' && button.scope) {
+			// Extract the command structure from the existing cmd
+			// The cmd might be something like: bash "/old/path/script.sh" {arg1} {arg2}
+			// or: python "/old/path/script.py"
+			// We need to replace the old path with the new path while preserving the command and arguments
+			
+			// Get the old script path from the original scope
+			const originalScriptsDir = getScriptsDir(
+				button.scope, 
+				globalStoragePath
+			);
+			
+			if (originalScriptsDir && button.scriptFile) {
+				// Build the old script path
+				const oldScriptPath = path.join(originalScriptsDir, button.scriptFile);
+				
+				// Replace the old path with the new path in the command
+				// Handle both quoted and unquoted paths
+				let updatedCmd = button.cmd;
+				
+				// Try to replace quoted old path
+				const quotedOldPath = `"${oldScriptPath}"`;
+				const quotedNewPath = `"${scriptPath}"`;
+				if (updatedCmd.includes(quotedOldPath)) {
+					updatedCmd = updatedCmd.replace(quotedOldPath, quotedNewPath);
+				} else if (updatedCmd.includes(oldScriptPath)) {
+					// Try unquoted replacement
+					updatedCmd = updatedCmd.replace(oldScriptPath, `"${scriptPath}"`);
+				}
+	
+				scriptCommand = updatedCmd;
+			} else {
+				// Fallback: use the existing cmd as is
+				scriptCommand = button.cmd;
+			}
+		} else {
+			// No existing cmd - generate new command (default behavior)
+			scriptCommand = generateScriptCommand(
+				scriptFileName, 
+				scope, 
+				globalStoragePath,
+				button.inputs
+			);
+		}
 		
 		// Return updated button (without scriptContent, only scriptFile)
 		// Keep execDir so execution can handle directory change

@@ -221,11 +221,13 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			if (button.scriptContent) {
 				// Button needs a script file
 				const processedButton = await scriptManager.processButtonWithScript(
-					{ ...button, scope },
-					this.globalStoragePath
+					button,
+					this.globalStoragePath,
+					scope
 				);
 				
 				if (processedButton) {
+					processedButton.scope = scope; // Ensure scope is set correctly
 					processedButtons.push(processedButton);
 				} else {
 					console.error('DevBoost: Failed to process script for button:', button.name);
@@ -233,7 +235,7 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 				}
 			} else {
 				// Regular command button
-				processedButtons.push(button);
+				processedButtons.push({ ...button, scope });
 			}
 		}
 
@@ -488,7 +490,7 @@ What would you like to do?`;
 		const button = this.buttons[index];
 
 		// Show edit form
-		const editedButton = await EditButtonFormPanel.show(button);
+		const editedButton = await EditButtonFormPanel.show(button, this.globalStoragePath);
 
 		if (!editedButton) {
 			vscode.window.showInformationMessage('Edit cancelled.');
@@ -541,7 +543,7 @@ What would you like to do?`;
 	// Edit a new button (used during duplicate detection)
 	// Edit a new button (used during duplicate detection)
 	private async editNewButton(button: smartCmdButton): Promise<smartCmdButton | null> {
-		return await EditButtonFormPanel.show(button);
+		return await EditButtonFormPanel.show(button, this.globalStoragePath);
 	}
 
 	// Open script file in editor

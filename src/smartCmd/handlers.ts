@@ -335,6 +335,7 @@ What would you like to do?`,
 // Create a custom button (manual or AI-assisted)
 export async function createCustomButton(
 	activityLogPath: string | undefined,
+	globalStoragePath: string | undefined,
 	buttonsProvider: SmartCmdButtonsTreeProvider,
 	scopeInput?: 'Workspace' | 'Global'
 ) {
@@ -351,7 +352,7 @@ export async function createCustomButton(
 	}
 
 	if (useAI === 'Manual') {
-		const result = await ButtonFormPanel.show(scopeInput === 'Workspace' ? "workspace" : "global") as any;
+		const result = await ButtonFormPanel.show(scopeInput === 'Workspace' ? "workspace" : "global", buttonsProvider.globalStoragePath) as any;
 
 		if (!result) {
 			vscode.window.showInformationMessage('Button creation cancelled.');
@@ -377,6 +378,7 @@ export async function createCustomButton(
 		const result = await AIButtonDescriptionPanel.show(scopeInput === 'Global' ? 'global' : 'workspace');
 
 		if (!result) {
+			vscode.window.showInformationMessage('Button creation cancelled.');
 			return;
 		}
 
@@ -398,7 +400,7 @@ export async function createCustomButton(
 		try {
 
 			// Generate button using AI service with existing buttons for duplication check
-			button = await aiServices.getCustomButtonSuggestion(description, selectedScope, activityLogPath, buttonsProvider.getButtons());
+			button = await aiServices.getCustomButtonSuggestion(description, selectedScope, activityLogPath, globalStoragePath, buttonsProvider.getButtons());
 
 			// Check if panel was disposed during generation
 			if (isPanelDisposed) {
@@ -824,13 +826,13 @@ Do you want to add it to global scope anyway?`;
 			globalButton = {
 				name: item.button.name,
 				execDir: item.button.execDir, // Reset execDir for global button
-				cmd: '', // Will be set by processButtonWithScript
+				cmd: item.button.cmd, // Will be set by processButtonWithScript
 				scriptContent: scriptContent, // Temporary field for processing
 				scriptFile: item.button.scriptFile, // Keep same filename if possible
 				user_prompt: item.button.user_prompt,
 				description: item.button.description,
 				inputs: item.button.inputs,
-				scope: 'global',
+				scope: item.button.scope, // Keep original scope for now
 			};
 			
 		} catch (error) {
@@ -847,7 +849,7 @@ Do you want to add it to global scope anyway?`;
 			user_prompt: item.button.user_prompt,
 			description: item.button.description,
 			inputs: item.button.inputs,
-			scope: 'global',
+			scope: item.button.scope, // Keep original scope for now
 		};
 	}
 

@@ -204,11 +204,22 @@ If it's unique, respond with only "UNIQUE".`;
 			// Clean up the response (remove code blocks if present)
 			let cleanedAnswer = answer.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 			
-			// Try to find JSON object in the response
-			const jsonMatch = cleanedAnswer.match(/\{[^}]+\}/);
-			if (jsonMatch) {
-				const aiResponse = JSON.parse(jsonMatch[0]);
-				
+			// Try to parse the entire cleaned answer as JSON
+			// If that fails, try to find JSON object using a more robust regex
+			let aiResponse;
+			try {
+				aiResponse = JSON.parse(cleanedAnswer);
+			} catch (directParseError) {
+				// Try to find JSON object in the response using balanced braces
+				const jsonMatch = cleanedAnswer.match(/\{(?:[^{}]|\{[^{}]*\})*\}/);
+				if (jsonMatch) {
+					aiResponse = JSON.parse(jsonMatch[0]);
+				} else {
+					throw new Error('No valid JSON found in response');
+				}
+			}
+			
+			if (aiResponse) {
 				// Validate that we have the required fields
 				if (aiResponse.name && aiResponse.cmd && aiResponse.scope) {
 					// Find the button that matches ALL three fields
@@ -607,6 +618,15 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 		if (jsonMatch) {
 			const buttons = JSON.parse(jsonMatch[0]) as smartCmdButton[];
 			console.log('Parsed buttons from AI response:', buttons);
+			// remove cmd if scriptContent exists
+			buttons.forEach(b => {
+				if (b.scriptContent?.trim().length) {
+					b.cmd = '';
+				}
+				else {
+					b.scriptContent = undefined;
+				}
+			});
 			return buttons.filter(b => b.name && (b.cmd || b.scriptContent));
 		}
 
@@ -632,6 +652,7 @@ export async function getCustomButtonSuggestion(
 	description: string,
 	scope: 'workspace' | 'global' = 'workspace',
 	activityLogPath?: string,
+	globalStoragePath?: string,
 	existingButtons: smartCmdButton[] = []
 ): Promise<smartCmdButton | null> {
 	try {
@@ -685,6 +706,7 @@ ${optimizedLog.recentLogs.join('\n')}
 WORKSPACE CONTEXT:
 - Workspace Name: ${workspaceName}
 - Workspace Path: ${workspacePath}
+- Workspace script dir path: ${path.join(workspacePath, '.vscode', 'devBoost', 'scripts')}
 - Button Scope: Workspace-specific (will only be available in this project)
 
 IMPORTANT: Since this button is workspace-specific, you can
@@ -698,6 +720,8 @@ ${workspaceLogContext}`;
 		} else {
 			workspaceContext = `
 BUTTON SCOPE: Global (will be available across all projects)
+- Global extenstion Path: ${globalStoragePath}
+- Global script dir path: ${globalStoragePath ? path.join(globalStoragePath, 'scripts') : 'N/A'}
 
 IMPORTANT: Since this button is global, you should:
 - Use generic commands that work anywhere (e.g., git status, npm install)
@@ -864,6 +888,12 @@ Only respond with the JSON object, no additional text.`;
 				if (button.name && (button.cmd || button.scriptContent) && button.description) {
 					button.user_prompt = description;
 					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
+					if(button.scriptContent?.trim().length) {
+						button.cmd = '';
+					}
+					else {
+						button.scriptContent = undefined;
+					}
 					console.log('Successfully parsed button:', button);
 					return button;
 				}

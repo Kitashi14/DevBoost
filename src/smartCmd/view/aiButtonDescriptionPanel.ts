@@ -17,7 +17,7 @@ export class AIButtonDescriptionPanel {
 			const panel = vscode.window.createWebviewPanel(
 				'aiButtonDescription',
 				'Describe Your Custom Button',
-				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
+				{ viewColumn: vscode.ViewColumn.Two, preserveFocus: false },
 				{
 					enableScripts: true,
 					retainContextWhenHidden: true

@@ -32,7 +32,7 @@ export class InputFormPanel {
 			const panel = vscode.window.createWebviewPanel(
 				'inputForm',
 				title,
-				{ viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
+				{ viewColumn: vscode.ViewColumn.Two, preserveFocus: false },
 				{
 					enableScripts: true,
 					retainContextWhenHidden: true

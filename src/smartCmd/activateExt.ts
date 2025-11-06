@@ -51,14 +51,14 @@ export async function activateSmartCmd(
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
 			if(sectionObj.section == 'global'){ 
-				await handlers.createCustomButton(activityLogPath, buttonsProvider, 'Global');
+				await handlers.createCustomButton(activityLogPath, globalStoragePath, buttonsProvider, 'Global');
 			}
 			else {
-				await handlers.createCustomButton(activityLogPath, buttonsProvider, 'Workspace');
+				await handlers.createCustomButton(activityLogPath, globalStoragePath, buttonsProvider, 'Workspace', );
 			}
 		}
 		else {
-			await handlers.createCustomButton(activityLogPath,buttonsProvider);
+			await handlers.createCustomButton(activityLogPath, globalStoragePath, buttonsProvider);
 		}
 	});
 
@@ -194,7 +194,6 @@ async function loadExampleButtonsIfNeeded(
 					const scriptCommand = scriptManager.generateScriptCommand(
 						scriptButton.scriptFile,
 						'workspace',
-						scriptButton.execDir,
 						globalStoragePath,
 						scriptButton.inputs
 					);
