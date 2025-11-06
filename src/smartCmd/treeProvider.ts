@@ -150,7 +150,7 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 		// Load workspace buttons
 		if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 			const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-			const buttonsFilePath = path.join(workspaceRoot, '.vscode', 'devboost.json');
+			const buttonsFilePath = path.join(workspaceRoot, '.vscode', 'devBoost', 'smartCmd.json');
 
 			try {
 				const content = await fs.readFile(buttonsFilePath, 'utf-8');
@@ -580,7 +580,7 @@ What would you like to do?`;
 		}
 
 		const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-		const buttonsFilePath = path.join(workspaceRoot, '.vscode', 'devboost.json');
+		const buttonsFilePath = path.join(workspaceRoot, '.vscode', 'devBoost', 'smartCmd.json');
 
 		try {
 			await fs.mkdir(path.dirname(buttonsFilePath), { recursive: true });

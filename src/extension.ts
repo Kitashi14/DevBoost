@@ -21,7 +21,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Initialize activity log path
 	if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 		const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-		activityLogPath = path.join(workspaceRoot, '.vscode', 'activity.log');
+		activityLogPath = path.join(workspaceRoot, '.vscode', 'devBoost', 'activity.log');
 	}
 
 	// Setup activity logging (will schedule cleanup if activityLogPath exists)
@@ -65,7 +65,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			// Update activity log path for new workspace
 			if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 				const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-				activityLogPath = path.join(workspaceRoot, '.vscode', 'activity.log');
+				activityLogPath = path.join(workspaceRoot, '.vscode', 'devBoost', 'activity.log');
 				console.log('DevBoost: Updated activity log path:', activityLogPath);
 				
 				// Schedule cleanup for new workspace

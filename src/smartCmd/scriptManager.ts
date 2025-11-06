@@ -13,7 +13,7 @@ export function getScriptsDir(scope: 'workspace' | 'global', globalStoragePath?:
 			return null;
 		}
 		const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-		return path.join(workspaceRoot, '.vscode', 'scripts');
+		return path.join(workspaceRoot, '.vscode', 'devBoost', 'scripts');
 	} else {
 		if (!globalStoragePath) {
 			return null;

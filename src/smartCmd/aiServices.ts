@@ -23,7 +23,7 @@ async function logPromptToFile(functionName: string, prompt: string, response: s
 			return;
 		}
 
-		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'ai_prompts.log');
+		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'devBoost', 'ai_services_smartCmd.log');
 		
 		// Ensure directory exists
 		await fs.mkdir(path.dirname(logFilePath), { recursive: true });

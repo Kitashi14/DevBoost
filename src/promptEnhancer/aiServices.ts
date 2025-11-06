@@ -21,7 +21,7 @@ async function logPromptToFile(functionName: string, prompt: string, response: s
 			return;
 		}
 
-		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'ai_prompts_enhancer.log');
+		const logFilePath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'devBoost', 'ai_services_promptEnhancer.log');
 		
 		// Ensure directory exists
 		await fs.mkdir(path.dirname(logFilePath), { recursive: true });
@@ -296,7 +296,7 @@ export async function quickEnhancePrompt(originalPrompt: string): Promise<string
 Keep the original intent but enhance clarity, add helpful context, and improve structure.
 
 ORIGINAL PROMPT:
-"${originalPrompt}"
+${originalPrompt}
 
 RULES:
 - Keep the same core request

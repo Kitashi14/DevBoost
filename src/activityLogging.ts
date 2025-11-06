@@ -279,7 +279,7 @@ export function setupActivityLogging(
 }
 
 /**
- * Log activity to .vscode/activity.log with enhanced context
+ * Log activity to .vscode/devBoost/activity.log with enhanced context
  */
 export async function logActivity(type: string, detail: string, activityLogPath: string | undefined, context?: LogContext) {
 	// Validate parameters
@@ -328,7 +328,7 @@ export async function logActivity(type: string, detail: string, activityLogPath:
 		// Format as JSON for structured logging but also maintain human readable format
 		const structuredLog = `${timestamp} | ${type.trim()}: ${detail.trim()} | Context: ${JSON.stringify(contextInfo)}\n`;
 		
-		// Create .vscode directory if it doesn't exist
+		// Create .vscode/devBoost directory if it doesn't exist
 		const vscodeDirPath = path.dirname(activityLogPath);
 		await fs.mkdir(vscodeDirPath, { recursive: true });
 		

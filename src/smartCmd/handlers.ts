@@ -554,7 +554,7 @@ export async function openButtonsFile(item: any, globalButtonsPath: string | und
 			}
 			
 			const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-			filePath = path.join(workspaceRoot, '.vscode', 'devboost.json');
+			filePath = path.join(workspaceRoot, '.vscode', 'devBoost', 'smartCmd.json');
 			
 			// Ensure the file exists
 			try {

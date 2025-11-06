@@ -175,7 +175,7 @@ async function loadExampleButtonsIfNeeded(
 				// Create the example script file in workspace
 				if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 					const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-					const scriptsDir = path.join(workspaceRoot, '.vscode', 'scripts');
+					const scriptsDir = path.join(workspaceRoot, '.vscode', 'devBoost', 'scripts');
 					await fs.mkdir(scriptsDir, { recursive: true });
 					
 					const scriptPath = path.join(scriptsDir, examples.exampleScript.filename);
@@ -249,7 +249,7 @@ async function getButtonCount(scope: 'workspace' | 'global', globalStoragePath?:
 				return 0;
 			}
 			const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-			buttonsFilePath = path.join(workspaceRoot, '.vscode', 'devboost.json');
+			buttonsFilePath = path.join(workspaceRoot, '.vscode', 'devBoost', 'smartCmd.json');
 		}
 
 		const content = await fs.readFile(buttonsFilePath, 'utf-8');
