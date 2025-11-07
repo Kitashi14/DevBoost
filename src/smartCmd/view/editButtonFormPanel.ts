@@ -355,9 +355,20 @@ export class EditButtonFormPanel {
 
 			<div class="form-group">
 				<label for="description">${descriptionLabel}</label>
-				<input type="text" id="description" value="${escapeHtml(currentDescription)}" placeholder="Brief description of what this button does">
+				<textarea id="description" placeholder="Brief description of what this button does">${escapeHtml(currentDescription)}</textarea>
 				<div class="hint">Add a description to help understand this button</div>
 			</div>
+			${button.user_prompt? `
+			<div class="form-group">
+				<label for="userPrompt">User Prompt</label>
+				<textarea id="userPrompt" disabled style="cursor: not-allowed; opacity: 0.6;">${escapeHtml(button.user_prompt)}</textarea>
+				<div class="hint">Description provided by user for creating this button</div>
+			</div>` : ''}
+			${button.modelUsed? `
+			<div class="form-group">
+				<label for="modelUsed">AI Model Used</label>
+				<input type="text" id="modelUsed" value="${escapeHtml(button.modelUsed)}" disabled style="cursor: not-allowed; opacity: 0.6;">
+			</div>` : ''}
 
 			<div class="form-group">
 				<label for="execDir">Execution Directory</label>

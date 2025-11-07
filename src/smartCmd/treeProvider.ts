@@ -24,6 +24,7 @@ export interface smartCmdButton {
 	execDir?: string;               // Optional execution directory
 	scriptFile?: string;            // Optional script file name (stored in scripts folder)
 	scriptContent?: string;         // Script content (only used during creation, not saved to JSON)
+	modelUsed?: string;             // AI model used for this button (if any)
 }
 
 // Section type for organizing buttons
@@ -76,15 +77,11 @@ export class SmartCmdButtonTreeItem extends SmartCmdTreeItemBase {
 		if(!button.description){
 			tooltipParts.push(`No description available.`);
 		}
-
-		if(button.user_prompt){
-			tooltipParts.push(`User Prompt: ${button.user_prompt}`);
-		}
 		
 		// Show script file indicator if present
-		const cmdDisplay = button.scriptFile 
-			? `Script: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}run ${button.scriptFile}`
-			: `Command: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.cmd}`;
+		const cmdDisplay = `Command: ${button.execDir && button.execDir.trim() !== '.' && button.execDir.trim() !== '' ? `cd ${button.execDir} && ` : ''}${button.scriptFile 
+			? `run ${button.scriptFile}`
+			: button.cmd}`;
 		
 		tooltipParts.push(cmdDisplay);
 		
@@ -267,7 +264,7 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 
 				// Check for duplicates using AI-powered semantic comparison
 				progress.report({ message: `${i + 1}/${processedButtons.length}` });
-				const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope);
+				const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope, this.globalStoragePath);
 
 				if (duplicateButton) {
 					duplicateButtons.push({newButton: b, existingButton: duplicateButton});

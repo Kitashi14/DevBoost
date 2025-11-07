@@ -4,6 +4,7 @@ import { smartCmdButton } from './treeProvider';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as activityLogging from '../activityLogging';
+import * as configManager from '../configManager';
 
 // Development mode flag - set to false in production
 const ENABLE_PROMPT_LOGGING = true;
@@ -84,7 +85,8 @@ function getSystemInfo(): { platform: string; shell: string} {
 export async function checkDuplicateButton(
 	newButton: smartCmdButton,
 	existingButtons: smartCmdButton[],
-	targetScope: 'workspace' | 'global'
+	targetScope: 'workspace' | 'global',
+	globalStoragePath?: string
 ): Promise<smartCmdButton | null> {
 	if (existingButtons.length === 0) {
 		return null;
@@ -123,13 +125,11 @@ export async function checkDuplicateButton(
 
 	// Use AI for semantic similarity check
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
+		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
 		
-		if (models.length === 0) {
+		if (!model) {
 			return null;
 		}
-
-		const model = models[0];
 
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.description || 'N/A';
@@ -170,8 +170,9 @@ Don't consider buttons as duplicates if they:
 3. Execute commands in different directories that change their context significantly
 
 NOTE:
-If it's a duplicate/similar, respond with only JSON containing the existing button's details:
-{"name": "🔨 Build Project", "execDir": "./backend", "cmd": "npm run build", "scope": "workspace"}
+If it's a duplicate/similar, respond with only JSON object containing the existing button's details.
+Eg:
+{"name": "🔨 Build Project", "execDir": "./backend", "description": "to build the project", "scope": "workspace"}
 
 If it's unique, respond with only "UNIQUE".`;
 
@@ -189,7 +190,8 @@ If it's unique, respond with only "UNIQUE".`;
 		await logPromptToFile('checkDuplicateButton', prompt, fullResponse, {
 			newButton: { name: newButton.name, execDir: newButton.execDir, cmd: newButton.cmd },
 			targetScope,
-			existingButtonsCount: buttonsToCheck.length
+			existingButtonsCount: buttonsToCheck.length,
+			model: model.family
 		});
 
 		console.log('AI duplicate detection response:', fullResponse);
@@ -221,17 +223,17 @@ If it's unique, respond with only "UNIQUE".`;
 			
 			if (aiResponse) {
 				// Validate that we have the required fields
-				if (aiResponse.name && aiResponse.cmd && aiResponse.scope) {
+				if (aiResponse.name && aiResponse.description && aiResponse.scope && aiResponse.execDir) {
 					// Find the button that matches ALL three fields
 					const matchingButton = buttonsToCheck.find(b => 
 						b.name === aiResponse.name && 
-						normalizeCmd(b.cmd) === normalizeCmd(aiResponse.cmd) &&
+						b.description === aiResponse.description &&
 						b.scope === aiResponse.scope &&
 						b.execDir === aiResponse.execDir
 					);
 					
 					if (matchingButton) {
-						console.log(`AI detected duplicate: "${newButton.name}" is similar to "${matchingButton.name}" (cmd: "${matchingButton.cmd}", scope: ${matchingButton.scope}, execDir: ${matchingButton.execDir})`);
+						console.log(`AI detected duplicate: "${newButton.name}" is similar to "${matchingButton.name}" (cmd: "${matchingButton.cmd}", description: "${matchingButton.description}", scope: ${matchingButton.scope}, execDir: ${matchingButton.execDir})`);
 						return matchingButton;
 					} else {
 						console.warn(`AI returned button details but couldn't find exact match: ${JSON.stringify(aiResponse)}`);
@@ -259,16 +261,14 @@ If it's unique, respond with only "UNIQUE".`;
  * Check if a button is safe to add to global scope using AI
  * Returns an object with isSafe boolean and reason string
  */
-export async function checkIfButtonIsGlobalSafe(button: smartCmdButton): Promise<{ isSafe: boolean; reason?: string }> {
+export async function checkIfButtonIsGlobalSafe(button: smartCmdButton, globalStoragePath?: string): Promise<{ isSafe: boolean; reason?: string }> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
+		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
 		
-		if (models.length === 0) {
+		if (!model) {
 			console.log('DevBoost: No AI model available for global safety check');
 			return { isSafe: true };
 		}
-
-		const model = models[0];
 
 		const prompt = `Analyze this VS Code button command to determine if it's safe to use globally across all projects, or if it's workspace-specific.
 
@@ -321,7 +321,8 @@ SAFE
 		// Log prompt for development
 		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
 			button: { name: button.name, execDir: button.execDir, cmd: button.cmd },
-			currentScope: button.scope
+			currentScope: button.scope,
+			model: model.family
 		});
 
 		console.log('DevBoost: Global safety check response:', fullResponse);
@@ -359,24 +360,16 @@ SAFE
  */
 export async function getAISuggestions(
 	optimizedLog: { summary: string; recentLogs: string[] },
-	existingButtons: smartCmdButton[] = []
+	existingButtons: smartCmdButton[] = [],
+	globalStoragePath?: string
 ): Promise<smartCmdButton[]> {
 	try {
-		// Log ALL available Copilot models first
-		const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
-		console.log('DevBoost: ALL available Copilot models:', allModels.map(m => ({ family: m.family, name: m.name, maxTokens: m.maxInputTokens })));
+		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
 		
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
-		
-		// Log selected model
-		console.log('DevBoost: Selected copilot models:', models.map(m => ({ family: m.family, name: m.name, maxTokens: m.maxInputTokens })));
-		
-		if (models.length === 0) {
-			vscode.window.showWarningMessage('GitHub Copilot models not available. Using fallback suggestions.');
+		if (!model) {
+			vscode.window.showWarningMessage('No AI model configured. Using fallback suggestions.');
 			return getFallbackSuggestions([]);
 		}
-
-		const model = models[0];
 		const { platform, shell } = getSystemInfo();
 		let workspaceName = 'N/A';
 		let workspacePath = 'N/A';
@@ -610,6 +603,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 			platform,
 			shell,
 			recentLogsCount: optimizedLog.recentLogs.length,
+			model: model.family
 		});
 
 		console.log('AI response for button suggestions:', fullResponse);
@@ -626,6 +620,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 				else {
 					b.scriptContent = undefined;
 				}
+				b.modelUsed = model.family;
 			});
 			return buttons.filter(b => b.name && (b.cmd || b.scriptContent));
 		}
@@ -656,14 +651,12 @@ export async function getCustomButtonSuggestion(
 	existingButtons: smartCmdButton[] = []
 ): Promise<smartCmdButton | null> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'claude-sonnet-4.5' });
+		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
 		
-		if (models.length === 0) {
-			vscode.window.showInformationMessage('GitHub Copilot not available. Please enter button details manually.');
+		if (!model) {
+			vscode.window.showInformationMessage('No AI model configured. Please enter button details manually.');
 			return null;
 		}
-
-		const model = models[0];
 		const { platform, shell } = getSystemInfo();
 
 		const buttonsToCheck = scope === 'global'
@@ -873,7 +866,8 @@ Only respond with the JSON object, no additional text.`;
 			scope,
 			platform,
 			shell,
-			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name
+			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name,
+			model: model.family
 		});
 
 		console.log('AI response for custom button:', fullResponse);
@@ -897,6 +891,7 @@ Only respond with the JSON object, no additional text.`;
 					else {
 						button.scriptContent = undefined;
 					}
+					button.modelUsed = model.family;
 					console.log('Successfully parsed button:', button);
 					return button;
 				}

@@ -470,7 +470,7 @@ export class ButtonFormPanel {
 
 			<div class="form-group">
 				<label for="description">Description</label>
-				<input type="text" id="description" placeholder="Brief description of what this button does">
+				<textarea id="description" placeholder="Brief description of what this button does"></textarea>
 				<div class="hint">Add a description to help understand this button</div>
 			</div>
 

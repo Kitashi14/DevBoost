@@ -65,7 +65,7 @@
       },
       {
         "command": "devboost.editButton",
-        "title": "Edit Button",
+        "title": "View/Edit Button Details",
         "icon": "$(edit)"
       },
       {
@@ -102,6 +102,16 @@
         "command": "devboost.openScriptFile",
         "title": "Open Script File",
         "icon": "$(file-code)"
+      },
+      {
+        "command": "devboost.changeSmartCmdAIModel",
+        "title": "Change AI Model for SmartCmd",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "devboost.changePromptEnhancerAIModel",
+        "title": "Change AI Model for Prompt Enhancer",
+        "icon": "$(settings-gear)"
       }
     ],
     "menus": {
@@ -125,6 +135,16 @@
           "command": "devboost.refreshButtons",
           "when": "view == devboost.smartCmdView",
           "group": "navigation@3"
+        },
+        {
+          "command": "devboost.changeSmartCmdAIModel",
+          "when": "view == devboost.smartCmdView",
+          "group": "navigation@4"
+        },
+        {
+          "command": "devboost.changePromptEnhancerAIModel",
+          "when": "view == devboost.promptEnhancerView",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [

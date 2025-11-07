@@ -84,7 +84,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 			token.onCancellationRequested(() => {
 				vscode.window.showInformationMessage('Button creation cancelled.');
 			});
-			const suggestedButtons = await aiServices.getAISuggestions(optimizedLog, buttonsProvider.getButtons());
+			const suggestedButtons = await aiServices.getAISuggestions(optimizedLog, buttonsProvider.getButtons(), buttonsProvider.globalStoragePath);
 			if(token.isCancellationRequested){
 				return 'cancelled';
 			}
@@ -768,7 +768,7 @@ export async function addToGlobal(item: SmartCmdButtonTreeItem, buttonsProvider:
 		title: "Analyzing button compatibility with global scope...",
 		cancellable: true
 	}, async (progress, token) => {
-		return await aiServices.checkIfButtonIsGlobalSafe(item.button);
+		return await aiServices.checkIfButtonIsGlobalSafe(item.button, buttonsProvider.globalStoragePath);
 	});
 
 	if (!safetyCheck.isSafe) {

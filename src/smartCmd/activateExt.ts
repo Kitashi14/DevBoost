@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as handlers from './handlers';
 import * as scriptManager from './scriptManager';
+import * as configManager from '../configManager';
 import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton } from './treeProvider';
 
 export async function activateSmartCmd(
@@ -116,6 +117,10 @@ export async function activateSmartCmd(
 		await buttonsProvider.openScriptFile(item);
 	});
 
+	const changeSmartCmdAIModelDisposable = vscode.commands.registerCommand('devboost.changeSmartCmdAIModel', async () => {
+		await configManager.changeAIModel('smartCmd', globalStoragePath);
+	});
+
 	// Register all SmartCmd commands
 	context.subscriptions.push(
 		createAIButtonsDisposable,
@@ -126,7 +131,8 @@ export async function activateSmartCmd(
 		addToGlobalDisposable,
 		refreshButtonsDisposable,
 		openButtonsFileDisposable,
-		openScriptFileDisposable
+		openScriptFileDisposable,
+		changeSmartCmdAIModelDisposable
 	);
 
 	// Listen for workspace folder changes to reload buttons

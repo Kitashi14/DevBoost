@@ -35,7 +35,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	await activateSmartCmd(context, globalStoragePath, activityLogPath);
 
 	// Register Prompt Enhancer commands
-	registerPromptEnhancerCommands(context);
+	registerPromptEnhancerCommands(context, globalStoragePath);
 
 	// Register Prompt Enhancer tree provider
 	const promptEnhancerProvider = new PromptEnhancerTreeProvider(context);

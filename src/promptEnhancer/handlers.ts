@@ -5,7 +5,7 @@ import * as aiServices from './aiServices';
 /**
  * Show the prompt enhancement interface
  */
-export async function showPromptEnhancer(): Promise<void> {
+export async function showPromptEnhancer(globalStoragePath: string): Promise<void> {
 	try {
 		// Create and show the prompt enhancer webview
 		const panel = vscode.window.createWebviewPanel(
@@ -26,13 +26,13 @@ export async function showPromptEnhancer(): Promise<void> {
 			async (message) => {
 				switch (message.command) {
 					case 'analyzePrompt':
-						await handleAnalyzePrompt(panel, message.prompt);
+						await handleAnalyzePrompt(panel, message.prompt, globalStoragePath);
 						break;
 					case 'applyEnhancements':
-						await handleApplyEnhancements(panel, message.originalPrompt, message.selectedSuggestions);
+						await handleApplyEnhancements(panel, message.originalPrompt, message.selectedSuggestions, globalStoragePath);
 						break;
 					case 'generateFromIntent':
-						await handleGenerateFromIntent(panel, message.intent, message.domain);
+						await handleGenerateFromIntent(panel, message.intent, message.domain, globalStoragePath);
 						break;
 					case 'copyToClipboard':
 						await vscode.env.clipboard.writeText(message.text);
@@ -51,7 +51,7 @@ export async function showPromptEnhancer(): Promise<void> {
 /**
  * Enhance a prompt from external input (used by smartCmd integration)
  */
-export async function enhancePromptFromInput(originalPrompt: string): Promise<string | null> {
+export async function enhancePromptFromInput(originalPrompt: string, globalStoragePath: string): Promise<string | null> {
 	try {
 		const panel = vscode.window.createWebviewPanel(
 			'promptEnhancerInput',
@@ -75,17 +75,17 @@ export async function enhancePromptFromInput(originalPrompt: string): Promise<st
 			panel.webview.onDidReceiveMessage(async (message) => {
 				switch (message.command) {
 					case 'analyzePrompt':
-						await handleAnalyzePrompt(panel, message.prompt);
+						await handleAnalyzePrompt(panel, message.prompt, globalStoragePath);
 						break;
 					case 'applyEnhancements':
-						const enhanced = await handleApplyEnhancements(panel, message.originalPrompt, message.selectedSuggestions);
+						const enhanced = await handleApplyEnhancements(panel, message.originalPrompt, message.selectedSuggestions, globalStoragePath);
 						if (enhanced) {
 							resolve(enhanced);
 							panel.dispose();
 						}
 						break;
 					case 'generateFromIntent':
-						const generated = await handleGenerateFromIntent(panel, message.intent, message.domain);
+						const generated = await handleGenerateFromIntent(panel, message.intent, message.domain, globalStoragePath);
 						if (generated) {
 							resolve(generated);
 							panel.dispose();
@@ -117,7 +117,7 @@ export async function enhancePromptFromInput(originalPrompt: string): Promise<st
 /**
  * Quick enhance from clipboard - minimalistic one-click enhancement
  */
-export async function quickEnhanceFromClipboard(): Promise<void> {
+export async function quickEnhanceFromClipboard(globalStoragePath: string): Promise<void> {
 	try {
 		// Get text from clipboard
 		const clipboardText = await vscode.env.clipboard.readText();
@@ -136,7 +136,7 @@ export async function quickEnhanceFromClipboard(): Promise<void> {
 			progress.report({ message: "Analyzing prompt..." });
 			
 			// Use AI to quickly enhance the prompt
-			const enhanced = await aiServices.quickEnhancePrompt(clipboardText.trim());
+			const enhanced = await aiServices.quickEnhancePrompt(clipboardText.trim(), globalStoragePath);
 			return enhanced;
 		});
 
@@ -176,14 +176,14 @@ export async function quickEnhanceFromClipboard(): Promise<void> {
 /**
  * Handle prompt analysis request
  */
-async function handleAnalyzePrompt(panel: vscode.WebviewPanel, prompt: string): Promise<void> {
+async function handleAnalyzePrompt(panel: vscode.WebviewPanel, prompt: string, globalStoragePath: string): Promise<void> {
 	try {
 		panel.webview.postMessage({
 			command: 'showLoading',
 			message: 'Analyzing prompt...'
 		});
 
-		const suggestions = await aiServices.getPromptEnhancementSuggestions(prompt);
+		const suggestions = await aiServices.getPromptEnhancementSuggestions(prompt, globalStoragePath);
 
 		panel.webview.postMessage({
 			command: 'showSuggestions',
@@ -205,7 +205,8 @@ async function handleAnalyzePrompt(panel: vscode.WebviewPanel, prompt: string): 
 async function handleApplyEnhancements(
 	panel: vscode.WebviewPanel, 
 	originalPrompt: string, 
-	selectedSuggestions: any[]
+	selectedSuggestions: any[],
+	globalStoragePath: string
 ): Promise<string | null> {
 	try {
 		panel.webview.postMessage({
@@ -213,7 +214,7 @@ async function handleApplyEnhancements(
 			message: 'Applying enhancements...'
 		});
 
-		const enhancedPrompt = await aiServices.applyEnhancements(originalPrompt, selectedSuggestions);
+		const enhancedPrompt = await aiServices.applyEnhancements(originalPrompt, selectedSuggestions, globalStoragePath);
 
 		panel.webview.postMessage({
 			command: 'showEnhancedPrompt',
@@ -239,7 +240,8 @@ async function handleApplyEnhancements(
 async function handleGenerateFromIntent(
 	panel: vscode.WebviewPanel, 
 	intent: string, 
-	domain?: string
+	domain: string | undefined,
+	globalStoragePath: string
 ): Promise<string | null> {
 	try {
 		panel.webview.postMessage({
@@ -247,7 +249,7 @@ async function handleGenerateFromIntent(
 			message: 'Generating prompt...'
 		});
 
-		const generatedPrompt = await aiServices.generatePromptFromIntent(intent, domain);
+		const generatedPrompt = await aiServices.generatePromptFromIntent(intent, domain, globalStoragePath);
 
 		panel.webview.postMessage({
 			command: 'showGeneratedPrompt',

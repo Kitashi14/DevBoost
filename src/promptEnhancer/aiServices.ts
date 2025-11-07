@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as configManager from '../configManager';
 
 // Enable prompt logging for development/debugging
 const ENABLE_PROMPT_LOGGING = true;
@@ -63,16 +64,14 @@ export interface EnhancementSuggestion {
 /**
  * Get AI-powered suggestions for improving a prompt
  */
-export async function getPromptEnhancementSuggestions(prompt: string): Promise<EnhancementSuggestion[]> {
+export async function getPromptEnhancementSuggestions(prompt: string, globalStoragePath?: string): Promise<EnhancementSuggestion[]> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
 		
-		if (models.length === 0) {
+		if (!model) {
 			vscode.window.showInformationMessage('GitHub Copilot not available for prompt enhancement.');
 			return [];
 		}
-
-		const model = models[0];
 		
 		const enhancementPrompt = `Analyze this prompt and suggest specific improvements:
 
@@ -125,7 +124,8 @@ RESPOND WITH JSON ARRAY ONLY:
 				await logPromptToFile('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
 					originalPrompt: prompt,
 					suggestionsCount: filteredSuggestions.length,
-					rawResponseLength: fullResponse.length
+					rawResponseLength: fullResponse.length,
+					model: model.family
 				});
 				
 				return filteredSuggestions;
@@ -137,7 +137,8 @@ RESPOND WITH JSON ARRAY ONLY:
 			await logPromptToFile('getPromptEnhancementSuggestions', enhancementPrompt, fullResponse, {
 				originalPrompt: prompt,
 				error: 'Parse error',
-				parseError: parseError instanceof Error ? parseError.message : String(parseError)
+				parseError: parseError instanceof Error ? parseError.message : String(parseError),
+				model: model.family
 			});
 		}
 
@@ -153,16 +154,16 @@ RESPOND WITH JSON ARRAY ONLY:
  */
 export async function applyEnhancements(
 	originalPrompt: string, 
-	selectedSuggestions: EnhancementSuggestion[]
+	selectedSuggestions: EnhancementSuggestion[],
+	globalStoragePath?: string
 ): Promise<string> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
 		
-		if (models.length === 0) {
+		if (!model) {
+			vscode.window.showInformationMessage('GitHub Copilot not available for prompt enhancement.');
 			return originalPrompt;
 		}
-
-		const model = models[0];
 		
 		const enhancementDetails = selectedSuggestions.map(s => 
 			`- ${s.type.toUpperCase()}: ${s.suggestion}`
@@ -196,7 +197,8 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 			selectedSuggestions,
 			enhancementDetails,
 			enhancedPromptLength: finalResult.length,
-			wasEnhanced: finalResult !== originalPrompt
+			wasEnhanced: finalResult !== originalPrompt,
+			model: model.family	
 		});
 
 		return finalResult;
@@ -208,7 +210,8 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 			originalPrompt,
 			selectedSuggestions,
 			error: error instanceof Error ? error.message : String(error),
-			fallbackToOriginal: true
+			fallbackToOriginal: true,
+			model: 'N/A'
 		});
 		
 		return originalPrompt;
@@ -218,16 +221,14 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 /**
  * Generate a completely new prompt based on user intent
  */
-export async function generatePromptFromIntent(intent: string, domain?: string): Promise<string> {
+export async function generatePromptFromIntent(intent: string, domain?: string, globalStoragePath?: string): Promise<string> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
 		
-		if (models.length === 0) {
+		if (!model) {
 			vscode.window.showInformationMessage('GitHub Copilot not available for prompt generation.');
 			return intent;
 		}
-
-		const model = models[0];
 		
 		const domainContext = domain ? `\nDOMAIN CONTEXT: ${domain}` : '';
 		
@@ -260,7 +261,8 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 			domain,
 			domainContext,
 			generatedPromptLength: finalResult.length,
-			wasGenerated: finalResult !== intent
+			wasGenerated: finalResult !== intent,
+			model: model.family
 		});
 
 		return finalResult;
@@ -272,7 +274,8 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 			userIntent: intent,
 			domain,
 			error: error instanceof Error ? error.message : String(error),
-			fallbackToIntent: true
+			fallbackToIntent: true,
+			model: 'N/A'
 		});
 		
 		return intent;
@@ -282,15 +285,13 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 /**
  * Quick enhance prompt - minimalistic one-step enhancement
  */
-export async function quickEnhancePrompt(originalPrompt: string): Promise<string | null> {
+export async function quickEnhancePrompt(originalPrompt: string, globalStoragePath?: string): Promise<string | null> {
 	try {
-		const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
 		
-		if (models.length === 0) {
+		if (!model) {
 			return null;
 		}
-
-		const model = models[0];
 		
 		const quickEnhancePrompt = `Quickly improve this prompt to make it clearer, more specific, and more effective. 
 Keep the original intent but enhance clarity, add helpful context, and improve structure.
@@ -322,7 +323,8 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO EXPLANATION:`;
 		await logPromptToFile('quickEnhancePrompt', quickEnhancePrompt, enhancedPrompt, {
 			originalPrompt,
 			enhancedPromptLength: finalResult.length,
-			wasEnhanced: finalResult !== originalPrompt
+			wasEnhanced: finalResult !== originalPrompt,
+			model: model.family
 		});
 
 		return finalResult;
@@ -333,7 +335,8 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO EXPLANATION:`;
 		await logPromptToFile('quickEnhancePrompt', 'N/A - Error occurred', 'N/A - Error occurred', {
 			originalPrompt,
 			error: error instanceof Error ? error.message : String(error),
-			returnedNull: true
+			returnedNull: true,
+			model: 'N/A'
 		});
 		
 		return null;
