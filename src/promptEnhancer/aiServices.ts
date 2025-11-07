@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as configManager from '../configManager';
 
 // Enable prompt logging for development/debugging
-const ENABLE_PROMPT_LOGGING = true;
+const ENABLE_PROMPT_LOGGING = false;
 
 /**
  * Log AI prompts to file for development/debugging purposes

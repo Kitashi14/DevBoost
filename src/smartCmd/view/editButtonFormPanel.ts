@@ -22,7 +22,7 @@ export class EditButtonFormPanel {
 				}
 			);
 
-			panel.webview.html = this.getHtmlContent(panel.webview, button);
+			panel.webview.html = this.getHtmlContent(panel.webview, button, globalStoragePath);
 
 			// Handle messages from the webview
 			panel.webview.onDidReceiveMessage(
@@ -81,11 +81,19 @@ export class EditButtonFormPanel {
 		});
 	}
 
-	private static getHtmlContent(webview: vscode.Webview, button: smartCmdButton): string {
+	private static getHtmlContent(webview: vscode.Webview, button: smartCmdButton, globalStoragePath?: string): string {
 		// Get the current description
 		const currentDescription = button.description || '';
 		const descriptionLabel = 'Description';
 		const scopeLabel = button.scope === 'workspace' ? 'Workspace' : button.scope === 'global' ? 'Global' : 'Unknown';
+
+		let scriptPath = undefined;
+		if (button.scope && button.scriptFile && globalStoragePath) {
+			const scriptsDir = getScriptsDir(button.scope, globalStoragePath);
+			if (scriptsDir) {
+				scriptPath = path.join(scriptsDir, button.scriptFile);
+			}
+		}
 		
 		// Escape special characters for HTML
 		const escapeHtml = (text: string) => {
@@ -322,6 +330,13 @@ export class EditButtonFormPanel {
 			margin-bottom: 10px;
 		}
 
+		.script-path {
+			font-family: var(--vscode-editor-font-family);
+			color: var(--vscode-descriptionForeground);
+			font-size: 12px;
+			margin-bottom: 10px;
+		}
+
 		.btn-open-script {
 			background-color: var(--vscode-button-secondaryBackground);
 			color: var(--vscode-button-secondaryForeground);
@@ -377,15 +392,18 @@ export class EditButtonFormPanel {
 			</div>
 
 			<div class="form-group">
-				<label for="cmd">Command<span class="required">*</span></label>
-				<textarea id="cmd" placeholder="cmd to be executed in terminal (e.g. npm run, git status && ls -l)">${escapeHtml(button.cmd)}</textarea>
+				<label for="cmd">Command${button.scriptFile ? ' to execute script file': ''}<span class="required">*</span></label>
+				<textarea id="cmd" placeholder="${button.scriptFile ? `e.g., bash &quot;/path/to/script.sh&quot; {input_1} {input_2}, python &quot;/path/to/script.py&quot;`:`e.g. npm run, git status && ls -l`}">${escapeHtml(button.cmd)}</textarea>
+				<div class="hint">${button.scriptFile ? `Full command to execute the script, including provided script path. Use {variableName} for dynamic inputs.` : `Command to be executed in terminal. Use {variableName} for dynamic inputs (eg. git commit -m '{message}')`}</div>
 				<div class="error-message" id="cmdError"></div>
-				<div class="hint">Use {variableName} for dynamic inputs (eg. git commit -m '{message}')</div>
+				
+				
 			</div>
 			${button.scriptFile ? `
 			<div class="script-info">
 				<h3>📜 Script File</h3>
 				<div class="script-filename">${escapeHtml(button.scriptFile)}</div>
+				<div class="script-path">${escapeHtml(scriptPath || '')}</div>
 				<button type="button" class="btn-open-script" id="openScriptBtn">Open Script File</button>
 			</div>
 			` : ''}

@@ -7,7 +7,7 @@ import * as activityLogging from '../activityLogging';
 import * as configManager from '../configManager';
 
 // Development mode flag - set to false in production
-const ENABLE_PROMPT_LOGGING = true;
+const ENABLE_PROMPT_LOGGING = false;
 
 /**
  * Log AI prompts to file for development/debugging purposes
