@@ -431,7 +431,6 @@ export async function createCustomButton(
 		AIButtonDescriptionPanel.close(panel);
 
 		if (!button) {
-			vscode.window.showInformationMessage('Could not generate button. Please try again.');
 			return;
 		}
 
@@ -684,6 +683,10 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 		// Use active terminal if available, otherwise create new one
 		const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('DevBoost');
 		terminal.show();
+		if( aiServices.getSystemInfo().platform === 'Windows' ) {
+			// On Windows, ensure we are using Command Prompt
+			finalCommand = `cmd /c '${finalCommand}'`;
+		}
 		terminal.sendText(finalCommand);
 		
 		const buttonType = button.scriptFile ? ' (script)' : '';

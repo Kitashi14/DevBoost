@@ -254,7 +254,7 @@ export async function getAIModel(module: 'smartCmd' | 'promptEnhancer', globalSt
 	const selectedModel = await showModelPicker(module, moduleConfig || null, globalStoragePath);
 	
 	if (!selectedModel) {
-		vscode.window.showInformationMessage(`No AI model selected for ${moduleName}. AI features will use fallback behavior.`);
+		vscode.window.showInformationMessage(`No AI model selected for ${moduleName}.`);
 		return null;
 	}
 	

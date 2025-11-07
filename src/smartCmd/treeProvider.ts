@@ -490,7 +490,7 @@ What would you like to do?`;
 		const editedButton = await EditButtonFormPanel.show(button, this.globalStoragePath);
 
 		if (!editedButton) {
-			vscode.window.showInformationMessage('Edit cancelled.');
+			vscode.window.showInformationMessage('Edit panel closed.');
 			return;
 		}
 

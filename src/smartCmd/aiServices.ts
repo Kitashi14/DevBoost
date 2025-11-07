@@ -57,7 +57,7 @@ ${'='.repeat(80)}
 }
 
 // Get system information for AI context
-function getSystemInfo(): { platform: string; shell: string} {
+export function getSystemInfo(): { platform: string; shell: string} {
 	// Determine OS
 	let platform = 'Unknown';
 	if (process.platform === 'win32') {
