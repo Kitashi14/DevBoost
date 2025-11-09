@@ -2,3 +2,4 @@ node_modules/
 personal_notes.txt
 out/
 .vscode*/*
+*.vsix

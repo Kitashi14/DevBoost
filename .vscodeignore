@@ -9,3 +9,18 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+
+# Exclude test files
+test-enhanced-logging.js
+test-functionality.js
+test-prompt-enhancer.js
+out/test/**
+
+# Exclude personal and development files
+personal_notes.txt
+exampleButtons.json
+HACKATHON_PRESENTATION.md
+
+# Exclude development scripts
+.npmignore
+.editorconfig

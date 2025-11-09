@@ -1,9 +1,13 @@
 {
-  "name": "devboost",
+  "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "DevBoost is a Visual Studio Code extension built to supercharge developer productivity through AI-driven automation and workflow optimization. Features include SmartCmd for one-click automation buttons, Prompt Enhancer for improving AI interactions (like Webex rewrite message), and intelligent activity logging for better AI suggestions.",
   "version": "0.2.0",
-  "publisher": "devboost",
+  "publisher": "DevBoost",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kitashi14/DevBoost"
+  },
   "engines": {
     "vscode": "^1.105.0"
   },
