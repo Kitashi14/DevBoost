@@ -684,7 +684,7 @@ Workspace path: ${workspaceFolder.uri.fsPath}
 Before proceeding MAKE SURE: 
 
 1. To enter into the Non-VScode terminal session. Open a terminal in this workspace, then enter into your ${sessionTypesSupported} session from there.
-2. No process is running inside the Non-VScode session that could be affect environment variable changes.`;
+2. No process is running inside the Non-VScode session that could affect environment variable changes.`;
 	
 
 	const choice = await CustomDialog.show({
@@ -746,10 +746,10 @@ Workspace path: ${workspaceFolder.uri.fsPath}
 Before proceeding, MAKE SURE:
 
 1. To enter into the Non-VScode terminal session. Open a terminal in this workspace, then enter into your ${sessionTypesSupported} session from there.
-4. No process is running inside the session that could be affect environment variable changes.`;
+4. No process is running inside the session that could affect environment variable changes.`;
 
 	const choice = await CustomDialog.show({
-		title: 'Disable Non-VScode Terminal Session Tracking',
+		title: 'Disable Tracking in Non-VScode Terminal Session',
 		message: confirmationMessage,
 		buttons: [
 			{ label: 'Disable', id: 'Disable', isPrimary: true },
