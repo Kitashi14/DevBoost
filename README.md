@@ -61,6 +61,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
 - **Edit & Manage Buttons** - Right-click buttons to edit, delete, or copy to global scope
 - **View Scripts** - Right-click script buttons (📜) to view and edit script files
 - **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
+- **Bulk Edit Buttons** - Click 🖌️ to select multiple buttons for bulk edit
 
 **Note:** 
  - Use extension's UI to manage buttons instead of editing related JSON files directly.
