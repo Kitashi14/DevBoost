@@ -100,7 +100,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 			vscode.window.showWarningMessage('Could not generate button suggestions. Please try again.');
 			return;
 		}
-
+		let acceptedCount = 0;
 		// Show confirmation dialog with preview of AI-suggested buttons
 		const previewMessage = `AI has analyzed your workflow and suggests ${buttons.length} button${buttons.length > 1 ? 's' : ''}:
 
@@ -146,7 +146,6 @@ Do you want to create these buttons?`;
 		let finalButtons = buttons;
 
 		if (choice === 'Review Individually') {
-			let acceptedCount = 0;
 			let buttonCount = 0;
 			for (const button of buttons) {
 				buttonCount += 1;
@@ -295,9 +294,11 @@ What would you like to do?`,
 					// Skip this button
 					continue;
 				} else {
-						return;
+					vscode.window.showInformationMessage(`Button review cancelled. ${acceptedCount} button${acceptedCount !== 1 ? 's' : ''} created.`);
+					return;
 				}
 			}
+			vscode.window.showInformationMessage(`Button review completed. ${acceptedCount} button${acceptedCount !== 1 ? 's' : ''} created.`);
 			return;
 		}
 
