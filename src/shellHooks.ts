@@ -370,7 +370,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		// Compact script with formatted output messages
 		let code = '';
 		// Logic: Enable if in screen/tmux (always) OR (in SSH AND not in VS Code terminal)
-		code += `if [[ -n "\${STY:-}\${TMUX:-}" ]] || [[ -n "\${SSH_CONNECTION:-}" && ( -z "\${VSCODE_INJECTION:-}" || -z "\${TERM_PROGRAM:-}" || "\${TERM_PROGRAM}" != "vscode" ) ]]; then `;
+		code += `if [[ -n "\${STY:-}\${TMUX:-}" ]] || [[ -n "\${SSH_CONNECTION:-}" && ( "\${TERM_PROGRAM}" != "vscode" ) ]]; then `;
 		code += `if [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]] && [[ "\${DEVBOOST_WORKSPACE:-}" == "${workspacePath}" ]]; then `;
 		code += `echo ""; echo ""; echo "⚠️  DevBoost tracking is already enabled in this session for this workspace(${workspaceName})."; `;
 		code += `elif [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]]; then `;
@@ -444,7 +444,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		// Compact script with formatted output messages
 		let code = '';
 		// Logic: Enable if in screen/tmux (always) OR (in SSH AND not in VS Code terminal)
-		code += `if [[ -n "\${STY:-}\${TMUX:-}" ]] || [[ -n "\${SSH_CONNECTION:-}" && ( -z "\${VSCODE_INJECTION:-}" || -z "\${TERM_PROGRAM:-}" || "\${TERM_PROGRAM}" != "vscode" ) ]]; then `;
+		code += `if [[ -n "\${STY:-}\${TMUX:-}" ]] || [[ -n "\${SSH_CONNECTION:-}" && ( "\${TERM_PROGRAM}" != "vscode" ) ]]; then `;
 		code += `if [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]] && [[ "\${DEVBOOST_WORKSPACE:-}" == "${workspacePath}" ]]; then `;
 		code += `echo ""; echo ""; echo "⚠️  DevBoost tracking is already enabled in this session for this workspace(${workspaceName})."; `;
 		code += `elif [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]]; then `;
@@ -525,7 +525,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		// Compact script with formatted output messages
 		let code = '';
 		// Logic: Enable if in SSH/Remote PS AND not in VS Code terminal
-		code += `if (($env:SSH_CONNECTION -or $PSSenderInfo) -and ((-not $env:VSCODE_INJECTION) -or (-not $env:TERM_PROGRAM) -or ($env:TERM_PROGRAM -ne "vscode"))) { `;
+		code += `if (($env:SSH_CONNECTION -or $PSSenderInfo) -and (($env:TERM_PROGRAM -ne "vscode"))) { `;
 		code += `if ($env:DEVBOOST_TRACKING_ENABLED -and $env:DEVBOOST_WORKSPACE -eq "${workspacePath}") { `;
 		code += `Write-Host ""; Write-Host ""; Write-Host "⚠️  DevBoost tracking is already enabled in this session for this workspace(${workspaceName})." -ForegroundColor Yellow; `;
 		code += `} elseif ($env:DEVBOOST_TRACKING_ENABLED) { `;
