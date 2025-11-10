@@ -191,6 +191,15 @@ export class BulkEditPanel {
 			background-color: var(--vscode-button-secondaryHoverBackground);
 		}
 		
+		button.delete {
+			background-color: var(--vscode-errorForeground);
+		}
+		
+		button.delete:hover {
+			background-color: var(--vscode-errorForeground);
+			opacity: 0.85;
+		}
+		
 		button:disabled {
 			opacity: 0.5;
 			cursor: not-allowed;
@@ -490,7 +499,7 @@ export class BulkEditPanel {
 		<div class="bulk-actions">
 			<label>Bulk Actions:</label>
 			<button onclick="bulkSetExecDir()" class="secondary">Set Execution Directory</button>
-			<button onclick="bulkDelete()" class="secondary" style="background-color: var(--vscode-errorForeground);">Delete Selected</button>
+			<button onclick="bulkDelete()" class="secondary delete">Delete Selected</button>
 		</div>
 	</div>
 	
