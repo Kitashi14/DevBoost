@@ -322,11 +322,11 @@ export async function getAIModelConfig(module?: 'smartCmd' | 'promptEnhancer', g
 }
 
 /**
- * Change the AI model - prompts user to select a new model
- * @param module - Optional module to change model for. If not provided, prompts for which module
+ * Configure the AI model - prompts user to select a new model
+ * @param module - Optional module to configure model for. If not provided, prompts for which module
  * @param globalStoragePath - Optional global storage path
  */
-export async function changeAIModel(module: 'smartCmd' | 'promptEnhancer', globalStoragePath?: string): Promise<void> {
+export async function configureAIModel(module: 'smartCmd' | 'promptEnhancer', globalStoragePath?: string): Promise<void> {
 	let targetModule = module;
 	const moduleName = targetModule === 'smartCmd' ? 'SmartCmd' : 'Prompt Enhancer';
 	
@@ -361,11 +361,11 @@ export async function changeAIModel(module: 'smartCmd' | 'promptEnhancer', globa
 	
 	if (saved) {
 		vscode.window.showInformationMessage(
-			`${moduleName} AI Model changed to: ${selectedModel.name || selectedModel.family}`
+			`${moduleName} AI Model configured to: ${selectedModel.name || selectedModel.family}`
 		);
 	}
 	
-	console.log(`DevBoost: Changed AI model for ${targetModule}:`, { 
+	console.log(`DevBoost: Configured AI model for ${targetModule}:`, { 
 		family: selectedModel.family, 
 		name: selectedModel.name,
 		vendor: selectedModel.vendor

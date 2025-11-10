@@ -116,8 +116,8 @@ export async function activateSmartCmd(
 		await buttonsProvider.openScriptFile(item);
 	});
 
-	const changeSmartCmdAIModelDisposable = vscode.commands.registerCommand('devboost.changeSmartCmdAIModel', async () => {
-		await configManager.changeAIModel('smartCmd', globalStoragePath);
+	const configureSmartCmdAIModelDisposable = vscode.commands.registerCommand('devboost.configureSmartCmdAIModel', async () => {
+		await configManager.configureAIModel('smartCmd', globalStoragePath);
 	});
 
 	const bulkEditButtonsDisposable = vscode.commands.registerCommand('devboost.bulkEditButtons', async () => {
@@ -135,7 +135,7 @@ export async function activateSmartCmd(
 		refreshButtonsDisposable,
 		openButtonsFileDisposable,
 		openScriptFileDisposable,
-		changeSmartCmdAIModelDisposable,
+		configureSmartCmdAIModelDisposable,
 		bulkEditButtonsDisposable
 	);
 

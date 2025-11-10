@@ -32,10 +32,10 @@ export function registerPromptEnhancerCommands(context: vscode.ExtensionContext,
 	);
 
 	// Change AI model command for Prompt Enhancer
-	const changePromptEnhancerAIModelCmd = vscode.commands.registerCommand(
-		'devboost.changePromptEnhancerAIModel',
+	const configurePromptEnhancerAIModelCmd = vscode.commands.registerCommand(
+		'devboost.configurePromptEnhancerAIModel',
 		async () => {
-			await configManager.changeAIModel('promptEnhancer', globalStoragePath);
+			await configManager.configureAIModel('promptEnhancer', globalStoragePath);
 		}
 	);
 
@@ -43,7 +43,7 @@ export function registerPromptEnhancerCommands(context: vscode.ExtensionContext,
 	context.subscriptions.push(showPromptEnhancerCmd);
 	context.subscriptions.push(quickEnhanceCmd);
 	context.subscriptions.push(enhancePromptFromInputCmd);
-	context.subscriptions.push(changePromptEnhancerAIModelCmd);
+	context.subscriptions.push(configurePromptEnhancerAIModelCmd);
 
 	console.log('DevBoost: Prompt Enhancer commands registered successfully');
 }

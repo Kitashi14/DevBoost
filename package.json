@@ -108,8 +108,8 @@
         "icon": "$(file-code)"
       },
       {
-        "command": "devboost.changeSmartCmdAIModel",
-        "title": "Change AI Model for SmartCmd",
+        "command": "devboost.configureSmartCmdAIModel",
+        "title": "Configure AI Model for SmartCmd",
         "icon": "$(settings-gear)"
       },
       {
@@ -118,8 +118,8 @@
         "icon": "$(edit)"
       },
       {
-        "command": "devboost.changePromptEnhancerAIModel",
-        "title": "Change AI Model for Prompt Enhancer",
+        "command": "devboost.configurePromptEnhancerAIModel",
+        "title": "Configure AI Model for Prompt Enhancer",
         "icon": "$(settings-gear)"
       },
       {
@@ -161,7 +161,7 @@
           "group": "navigation@4"
         },
         {
-          "command": "devboost.changeSmartCmdAIModel",
+          "command": "devboost.configureSmartCmdAIModel",
           "when": "view == devboost.smartCmdView",
           "group": "z_tracking@1"
         },
@@ -176,7 +176,7 @@
           "group": "z_tracking@3"
         },
         {
-          "command": "devboost.changePromptEnhancerAIModel",
+          "command": "devboost.configurePromptEnhancerAIModel",
           "when": "view == devboost.promptEnhancerView",
           "group": "z_tracking@1"
         }
