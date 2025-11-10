@@ -9,7 +9,6 @@ import { registerPromptEnhancerCommands } from './promptEnhancer/promptEnhancer'
 import { PromptEnhancerTreeProvider } from './promptEnhancer/treeProvider';
 
 // Global variables
-let activityLogPath: string | undefined;
 let cleanupTimer: NodeJS.Timeout | undefined;
 
 
@@ -19,21 +18,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	console.log('DevBoost extension is now active!');
 
-	// Initialize activity log path
-	if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-		const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-		activityLogPath = path.join(workspaceRoot, '.vscode', 'devBoost', 'activity.log');
-	}
-
 	// Setup activity logging (will schedule cleanup if activityLogPath exists)
-	const result = activityLogging.setupActivityLogging(context, activityLogPath);
+	const result = activityLogging.setupActivityLogging(context);
 	cleanupTimer = result.cleanupTimer;
 
 	// Initialize global extension paths (in extension's global storage)
 	const globalStoragePath = context.globalStorageUri.fsPath;
 
 	// // Activate SmartCmd tool
-	await activateSmartCmd(context, globalStoragePath, activityLogPath);
+	await activateSmartCmd(context, globalStoragePath);
 
 	// Register Prompt Enhancer commands
 	registerPromptEnhancerCommands(context, globalStoragePath);
@@ -78,11 +71,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			// Update activity log path for new workspace
 			if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 				const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-				activityLogPath = path.join(workspaceRoot, '.vscode', 'devBoost', 'activity.log');
-				console.log('DevBoost: Updated activity log path:', activityLogPath);
 				
 				// Schedule cleanup for new workspace
-				cleanupTimer = activityLogging.scheduleLogCleanup(activityLogPath);
+				cleanupTimer = activityLogging.scheduleLogCleanup();
 				context.subscriptions.push({
 					dispose: () => {
 						if (cleanupTimer) {
@@ -90,8 +81,6 @@ export async function activate(context: vscode.ExtensionContext) {
 						}
 					}
 				});
-			} else {
-				activityLogPath = undefined;
 			}
 		})
 	);

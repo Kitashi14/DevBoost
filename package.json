@@ -2,7 +2,7 @@
   "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "Boost your productivity through AI-driven tools.",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "publisher": "DevBoost",
   "repository": {
     "type": "git",
@@ -119,12 +119,12 @@
       },
       {
         "command": "devboost.enableTrackingInCurrentSession",
-        "title": "Enable Non-VScode Terminal Session Tracking",
+        "title": "Enable Tracking Non-VScode Terminal Session",
         "icon": "$(debug-start)"
       },
       {
         "command": "devboost.disableTrackingInCurrentSession",
-        "title": "Disable Non-VScode Terminal Session Tracking",
+        "title": "Disable Tracking Non-VScode Terminal Session",
         "icon": "$(debug-stop)"
       }
     ],

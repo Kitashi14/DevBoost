@@ -59,8 +59,8 @@ function generateHookCode(shell: string, workspaceFolder: string): string {
 		code += '    local exit_code=$?\n';
 		code += '    local cmd=$(fc -ln -1 2>/dev/null | xargs 2>/dev/null)\n';
 		code += '    \n';
-		code += '    # Skip empty commands and devboost\'s own logging\n';
-		code += '    if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]]; then\n';
+		code += '    # Skip empty commands, devboost commands, and enable/disable scripts\n';
+		code += '    if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ DEVBOOST_TRACKING_ENABLED ]] && [[ ! "$cmd" =~ "DevBoost tracking" ]]; then\n';
 		code += '      local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")\n';
 		code += '      local shell_type="${SHELL##*/}"\n';
 		code += '      # Detect terminal type and extract ID/name\n';
@@ -102,8 +102,8 @@ function generateHookCode(shell: string, workspaceFolder: string): string {
 		code += '    local exit_code=$?\n';
 		code += '    local cmd=$(history 1 2>/dev/null | sed \'s/^[ ]*[0-9]*[ ]*//\')\n';
 		code += '    \n';
-		code += '    # Skip empty commands and devboost\'s own logging\n';
-		code += '    if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]]; then\n';
+		code += '    # Skip empty commands, devboost commands, and enable/disable scripts\n';
+		code += '    if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ DEVBOOST_TRACKING_ENABLED ]] && [[ ! "$cmd" =~ "DevBoost tracking" ]]; then\n';
 		code += '      local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")\n';
 		code += '      local shell_type="${SHELL##*/}"\n';
 		code += '      # Detect terminal type and extract ID/name\n';
@@ -146,7 +146,7 @@ function generateHookCode(shell: string, workspaceFolder: string): string {
 		code += '        $exit_code = $LASTEXITCODE\n';
 		code += '        $cmd = (Get-History -Count 1).CommandLine\n';
 		code += '        \n';
-		code += '        if ($cmd -and $cmd -notmatch "^DevBoost_") {\n';
+		code += '        if ($cmd -and $cmd -notmatch "^DevBoost_" -and $cmd -notmatch "DEVBOOST_TRACKING_ENABLED" -and $cmd -notmatch "DevBoost tracking") {\n';
 		code += '            $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")\n';
 		code += '            $workspace_name = Split-Path -Leaf $env:DEVBOOST_WORKSPACE\n';
 		code += '            # Detect terminal type\n';
@@ -387,7 +387,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `devboost_log_command() { `;
 		code += `local exit_code=$?; `;
 		code += `local cmd=$(fc -ln -1 2>/dev/null | xargs 2>/dev/null); `;
-		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]]; then `;
+		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]] && [[ ! "$cmd" =~ DEVBOOST_TRACKING_ENABLED ]] && [[ ! "$cmd" =~ "DevBoost tracking" ]]; then `;
 		code += `local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ"); `;
 		code += `local shell_type="\${SHELL##*/}"; `;
 		code += `local terminal_id="" terminal_name=""; `;
@@ -410,7 +410,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `devboost_log_command() { `;
 		code += `local exit_code=$?; `;
 		code += `local cmd=$(fc -ln -1 2>/dev/null | xargs 2>/dev/null); `;
-		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]]; then `;
+		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]] && [[ ! "$cmd" =~ DEVBOOST_TRACKING_ENABLED ]] && [[ ! "$cmd" =~ "DevBoost tracking" ]]; then `;
 		code += `local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ"); `;
 		code += `local shell_type="\${SHELL##*/}"; `;
 		code += `local terminal_id="" terminal_name=""; `;
@@ -463,7 +463,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `devboost_log_command() { `;
 		code += `local exit_code=$?; `;
 		code += `local cmd=$(history 1 2>/dev/null | sed 's/^[ ]*[0-9]*[ ]*//'); `;
-		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]]; then `;
+		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]] && [[ ! "$cmd" =~ DEVBOOST_TRACKING_ENABLED ]] && [[ ! "$cmd" =~ "DevBoost tracking" ]]; then `;
 		code += `local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ"); `;
 		code += `local shell_type="\${SHELL##*/}"; `;
 		code += `local terminal_id="" terminal_name=""; `;
@@ -488,7 +488,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `devboost_log_command() { `;
 		code += `local exit_code=$?; `;
 		code += `local cmd=$(history 1 2>/dev/null | sed 's/^[ ]*[0-9]*[ ]*//'); `;
-		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]]; then `;
+		code += `if [[ -n "$cmd" ]] && [[ ! "$cmd" =~ ^devboost_ ]] && [[ ! "$cmd" =~ ^export ]] && [[ ! "$cmd" =~ DEVBOOST_TRACKING_ENABLED ]] && [[ ! "$cmd" =~ "DevBoost tracking" ]]; then `;
 		code += `local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ"); `;
 		code += `local shell_type="\${SHELL##*/}"; `;
 		code += `local terminal_id="" terminal_name=""; `;
@@ -542,7 +542,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `function DevBoost_LogCommand { `;
 		code += `$exit_code = $LASTEXITCODE; `;
 		code += `$cmd = (Get-History -Count 1).CommandLine; `;
-		code += `if ($cmd -and $cmd -notmatch "^DevBoost_" -and $cmd -notmatch "^\\$env:") { `;
+		code += `if ($cmd -and $cmd -notmatch "^DevBoost_" -and $cmd -notmatch "^\\$env:" -and $cmd -notmatch "DEVBOOST_TRACKING_ENABLED" -and $cmd -notmatch "DevBoost tracking") { `;
 		code += `$timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"); `;
 		code += `$workspace_name = Split-Path -Leaf $env:DEVBOOST_WORKSPACE; `;
 		code += `$terminal_id = "temp"; $terminal_name = "temp-session"; `;
@@ -561,7 +561,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `function DevBoost_LogCommand { `;
 		code += `$exit_code = $LASTEXITCODE; `;
 		code += `$cmd = (Get-History -Count 1).CommandLine; `;
-		code += `if ($cmd -and $cmd -notmatch "^DevBoost_" -and $cmd -notmatch "^\\$env:") { `;
+		code += `if ($cmd -and $cmd -notmatch "^DevBoost_" -and $cmd -notmatch "^\\$env:" -and $cmd -notmatch "DEVBOOST_TRACKING_ENABLED" -and $cmd -notmatch "DevBoost tracking") { `;
 		code += `$timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"); `;
 		code += `$workspace_name = Split-Path -Leaf $env:DEVBOOST_WORKSPACE; `;
 		code += `$terminal_id = "temp"; $terminal_name = "temp-session"; `;
@@ -698,7 +698,7 @@ Before proceeding MAKE SURE:
 	
 
 	const choice = await CustomDialog.show({
-		title: 'Enable Tracking in Non-VScode Terminal Session',
+		title: 'Enable Tracking Non-VScode Terminal Session',
 		message: confirmationMessage,
 		buttons: [
 			{ label: 'Proceed', id: 'Proceed', isPrimary: true },
@@ -759,7 +759,7 @@ Before proceeding, MAKE SURE:
 4. No process is running inside the session that could affect environment variable changes.`;
 
 	const choice = await CustomDialog.show({
-		title: 'Disable Tracking in Non-VScode Terminal Session',
+		title: 'Disable Tracking Non-VScode Terminal Session',
 		message: confirmationMessage,
 		buttons: [
 			{ label: 'Disable', id: 'Disable', isPrimary: true },

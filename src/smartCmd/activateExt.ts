@@ -10,7 +10,6 @@ import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton } f
 export async function activateSmartCmd(
 	context: vscode.ExtensionContext,
 	globalStoragePath: string,
-	activityLogPath: string | undefined,
 ): Promise<void> {
 	// Initialize SmartCmd paths
 	const globalButtonsPath = path.join(globalStoragePath, 'global-smartCmd.json');
@@ -45,21 +44,21 @@ export async function activateSmartCmd(
 
 	// Register SmartCmd commands
 	const createAIButtonsDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateButtons', async () => {
-		await handlers.createAIButtons(activityLogPath, buttonsProvider);
+		await handlers.createAIButtons(buttonsProvider);
 	});
 
 	const createCustomButtonDisposable = vscode.commands.registerCommand('devboost.smartCmdCreateCustomButton', async (sectionObj: any) => {
 
 		if(sectionObj && typeof sectionObj === 'object' && 'section' in sectionObj) {
 			if(sectionObj.section == 'global'){ 
-				await handlers.createCustomButton(activityLogPath, globalStoragePath, buttonsProvider, 'Global');
+				await handlers.createCustomButton(globalStoragePath, buttonsProvider, 'Global');
 			}
 			else {
-				await handlers.createCustomButton(activityLogPath, globalStoragePath, buttonsProvider, 'Workspace', );
+				await handlers.createCustomButton(globalStoragePath, buttonsProvider, 'Workspace', );
 			}
 		}
 		else {
-			await handlers.createCustomButton(activityLogPath, globalStoragePath, buttonsProvider);
+			await handlers.createCustomButton(globalStoragePath, buttonsProvider);
 		}
 	});
 
@@ -81,7 +80,7 @@ export async function activateSmartCmd(
 			return;
 		}
 		
-		await handlers.executeButtonCommand(button, activityLogPath);
+		await handlers.executeButtonCommand(button);
 	});
 
 	const deleteButtonDisposable = vscode.commands.registerCommand('devboost.deleteButton', async (item: any) => {

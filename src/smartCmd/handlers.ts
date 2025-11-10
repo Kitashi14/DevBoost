@@ -12,13 +12,14 @@ import { ButtonFormPanel } from './view/manualButtonFormPanel';
 import { AIButtonDescriptionPanel } from './view/aiButtonDescriptionPanel';
 
 // Create AI-suggested buttons based on activity log
-export async function createAIButtons( activityLogPath: string | undefined, buttonsProvider: SmartCmdButtonsTreeProvider) {
+export async function createAIButtons( buttonsProvider: SmartCmdButtonsTreeProvider) {
 	// Check if workspace is open
 	if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 		vscode.window.showErrorMessage('Please open a workspace to use SmartCmd.');
 		return;
 	}
 
+	const activityLogPath = activityLogging.getCurrentActivityLogPath();
 	if (!activityLogPath) {
 		vscode.window.showErrorMessage('Activity log path not initialized.');
 		return;
@@ -326,11 +327,11 @@ What would you like to do?`,
 
 // Create a custom button (manual or AI-assisted)
 export async function createCustomButton(
-	activityLogPath: string | undefined,
 	globalStoragePath: string | undefined,
 	buttonsProvider: SmartCmdButtonsTreeProvider,
 	scopeInput?: 'Workspace' | 'Global'
 ) {
+	const activityLogPath = activityLogging.getCurrentActivityLogPath();
 	if(!scopeInput) {
 		scopeInput = 'Global';
 	}

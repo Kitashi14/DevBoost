@@ -62,7 +62,9 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
 - **View Scripts** - Right-click script buttons (📜) to view and edit script files
 - **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
 
-**Note:** Use the extension's UI to manage buttons instead of editing related JSON files directly to avoid error.
+**Note:** 
+ - Use extension's UI to manage buttons instead of editing related JSON files directly.
+ - Use 'Enable Tracking Non-VScode Terminal Session' feature under SmartCmd menu for tracking commands run in sessions like screen, tmux, ssh etc.
 
 
 ## Feedback & Feature Requests
