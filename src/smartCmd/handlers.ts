@@ -298,21 +298,12 @@ What would you like to do?`,
 						return;
 				}
 			}
-
-			if (acceptedCount === 0) {
-				vscode.window.showInformationMessage('No buttons were selected.');
-			} else {
-				vscode.window.showInformationMessage(`Created ${acceptedCount} AI-suggested button${acceptedCount > 1 ? 's' : ''}`);
-			}
 			return;
 		}
 
 		// Add buttons to tree view (only for 'Create All' choice)
-		const addedCount = await buttonsProvider.addButtons(finalButtons, 'workspace');
+		await buttonsProvider.addButtons(finalButtons, 'workspace');
 
-		if (addedCount > 0) {
-			vscode.window.showInformationMessage(`Created ${addedCount} AI-suggested button${addedCount > 1 ? 's' : ''}`);
-		}
 	} catch (error: any) {
 		console.error('DevBoost: Error creating AI buttons:', error);
 		
@@ -365,11 +356,7 @@ export async function createCustomButton(
 		delete (button as any).selectedScope;
 
 		// Add button to tree view using the scope selected in the form
-		const addedCount = await buttonsProvider.addButtons([button], selectedScope);
-
-		if (addedCount > 0) {
-			vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
-		}
+		await buttonsProvider.addButtons([button], selectedScope);
 		return;
 	}
 
@@ -583,11 +570,7 @@ Do you want to create this button?`;
 		}
 
 		// Add button to tree view using the selected scope from the form
-		const addedCount = await buttonsProvider.addButtons([button], selectedScope);
-
-		if (addedCount > 0) {
-			vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
-		}
+		await buttonsProvider.addButtons([button], selectedScope);
 
 	} catch (error) {
 		console.error('Error creating custom button:', error);

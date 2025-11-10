@@ -124,15 +124,15 @@ export function setupActivityLogging(
 	// Log when terminal commands are executed
 	context.subscriptions.push(
 		vscode.window.onDidEndTerminalShellExecution(async (event) => {
-			const commandLine = event.execution.commandLine.value;
-			const command = commandLine.trim();
-			const exitCode = event.exitCode;
-			
-			// Try to get CWD from shell integration if available
-			const executionCwd = event.execution.cwd;
-			
-			// Get current workspace path for tracking
-			const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const commandLine = event.execution.commandLine.value;
+		const command = commandLine.trim();
+		const exitCode = event.exitCode;
+		
+		// Try to get CWD from shell integration if available
+		const executionCwd = event.execution.cwd;
+		
+		// Get current workspace path for tracking
+		const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			
 		// Gather enhanced context information
 		const terminal = event.terminal;

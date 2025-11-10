@@ -116,6 +116,16 @@
         "command": "devboost.changePromptEnhancerAIModel",
         "title": "Change AI Model for Prompt Enhancer",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "devboost.enableTrackingInCurrentSession",
+        "title": "Enable Non-VScode Terminal Session Tracking",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "devboost.disableTrackingInCurrentSession",
+        "title": "Disable Non-VScode Terminal Session Tracking",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {
@@ -143,12 +153,22 @@
         {
           "command": "devboost.changeSmartCmdAIModel",
           "when": "view == devboost.smartCmdView",
-          "group": "navigation@4"
+          "group": "z_tracking@1"
+        },
+        {
+          "command": "devboost.enableTrackingInCurrentSession",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@2"
+        },
+        {
+          "command": "devboost.disableTrackingInCurrentSession",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@3"
         },
         {
           "command": "devboost.changePromptEnhancerAIModel",
           "when": "view == devboost.promptEnhancerView",
-          "group": "navigation@1"
+          "group": "z_tracking@1"
         }
       ],
       "view/item/context": [

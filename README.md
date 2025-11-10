@@ -63,6 +63,12 @@ DevBoost is a Visual Studio Code extension designed to boost developer productiv
 - **View Scripts** - Right-click script buttons (📜) to view and edit script files
 - **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
 
+## 📝 Feedback & Feature Requests
+
+We value your feedback! Help us improve DevBoost by sharing your thoughts, suggestions, or reporting issues:
+
+**[Submit Form](https://forms.gle/f5yhuX2UxUsgdXpu6)**
+
 ---
 
 DevBoost helps you work smarter, automate repetitive tasks, and get the most out of your development workflow in VS Code.

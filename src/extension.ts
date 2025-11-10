@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as activityLogging from './activityLogging';
+import * as shellHooks from './shellHooks';
 import { activateSmartCmd } from './smartCmd/activateExt';
 import { registerPromptEnhancerCommands } from './promptEnhancer/promptEnhancer';
 import { PromptEnhancerTreeProvider } from './promptEnhancer/treeProvider';
@@ -50,6 +51,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(helloWorldDisposable);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('devboost.enableTrackingInCurrentSession', async () => {
+			await shellHooks.enableTrackingInCurrentSession();
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('devboost.disableTrackingInCurrentSession', async () => {
+			await shellHooks.disableTrackingInCurrentSession();
+		})
+	);
 
 	// Register workspace change listener
 	context.subscriptions.push(
