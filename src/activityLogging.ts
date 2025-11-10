@@ -128,6 +128,15 @@ export function setupActivityLogging(
 		const command = commandLine.trim();
 		const exitCode = event.exitCode;
 		
+		// Skip DevBoost's own enable/disable tracking scripts (they're too long and not useful for workflow analysis)
+		if (command.includes('DEVBOOST_TRACKING_ENABLED') || 
+		    command.includes('devboost_log_command') ||
+		    command.includes('DevBoost_LogCommand') ||
+		    command.includes('DevBoost tracking')) {
+			console.log('DevBoost: Skipping enable/disable tracking script from activity log');
+			return;
+		}
+		
 		// Try to get CWD from shell integration if available
 		const executionCwd = event.execution.cwd;
 		
