@@ -1,8 +1,8 @@
 # DevBoost Extension Features
 
-DevBoost is a Visual Studio Code extension designed to boost developer productivity with AI-powered automation and workflow enhancements. Here are the key features:
+DevBoost is a Visual Studio Code extension designed to supercharge developer productivity with AI-powered automation and workflow enhancements. Here are the key features:
 
-## 🚀 Main Features
+## Main Features
 
 - **SmartCmd Automation Buttons**
   - Create one-click buttons for your most-used commands
@@ -23,7 +23,7 @@ DevBoost is a Visual Studio Code extension designed to boost developer productiv
   - Define button name, command, execution directory, and description
   - Add input placeholders for dynamic values at execution time
   - Choose between workspace-only or global availability
-  - Edit existing buttons to update names and descriptions
+  - Edit existing buttons to align with what you want
 
 - **Prompt Enhancer**
   - Improve your AI prompts for clarity, tone, and structure
@@ -45,14 +45,13 @@ DevBoost is a Visual Studio Code extension designed to boost developer productiv
   - Execute buttons with a single click
   - View button commands and descriptions in tooltips
   - Open and edit button configuration files directly
-  - **Note:** Use the extension's UI to manage buttons instead of editing JSON files directly to avoid errors
 
 - **Cross-Platform Compatibility**
   - Works seamlessly on Windows, macOS, and Linux
   - Adapts commands and scripts to your shell environment (bash, zsh, PowerShell, cmd)
   - Platform-aware command generation
 
-## 🌟 Quick Actions
+## Quick Actions
 
 - **Open DevBoost Sidebar** - Click the 🚀 rocket icon in VS Code's activity bar
 - **Generate AI-Suggested Buttons** - Click ✨ sparkle icon to analyze your workflow and create automation buttons
@@ -63,12 +62,14 @@ DevBoost is a Visual Studio Code extension designed to boost developer productiv
 - **View Scripts** - Right-click script buttons (📜) to view and edit script files
 - **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
 
-## 📝 Feedback & Feature Requests
+**Note:** Use the extension's UI to manage buttons instead of editing related JSON files directly to avoid error.
 
-We value your feedback! Help us improve DevBoost by sharing your thoughts, suggestions, or reporting issues:
+
+## Feedback & Feature Requests
+
+Help us improve DevBoost by sharing your thoughts, suggestions, or reporting issues.
 
 **[Submit Form](https://forms.gle/f5yhuX2UxUsgdXpu6)**
 
----
+------
 
-DevBoost helps you work smarter, automate repetitive tasks, and get the most out of your development workflow in VS Code.
