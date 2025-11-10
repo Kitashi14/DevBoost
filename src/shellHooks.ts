@@ -369,7 +369,8 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 	if (shell === 'zsh') {
 		// Compact script with formatted output messages
 		let code = '';
-		code += `if [[ -n "\${STY:-}\${TMUX:-}" || -n "\${SSH_CONNECTION:-}" ]]; then `;
+		// Logic: Enable if in screen/tmux (always) OR (in SSH AND not in VS Code terminal)
+		code += `if [[ -n "\${STY:-}\${TMUX:-}" ]] || [[ -n "\${SSH_CONNECTION:-}" && ( -z "\${VSCODE_INJECTION:-}" || -z "\${TERM_PROGRAM:-}" || "\${TERM_PROGRAM}" != "vscode" ) ]]; then `;
 		code += `if [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]] && [[ "\${DEVBOOST_WORKSPACE:-}" == "${workspacePath}" ]]; then `;
 		code += `echo ""; echo ""; echo "⚠️  DevBoost tracking is already enabled in this session for this workspace(${workspaceName})."; `;
 		code += `elif [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]]; then `;
@@ -434,13 +435,16 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `echo "     • tmux sessions (TMUX environment variable)"; `;
 		code += `echo "     • SSH sessions (SSH_CONNECTION environment variable)"; `;
 		code += `echo ""; `;
+		code += `echo "   Note: VS Code integrated terminals are automatically excluded."; `;
+		code += `echo ""; `;
 		code += `echo "   Please enter your screen/tmux/SSH session first, then use this feature again."; `;
 		code += `fi`;
 		return code;
 	} else if (shell === 'bash') {
 		// Compact script with formatted output messages
 		let code = '';
-		code += `if [[ -n "\${STY:-}\${TMUX:-}" || -n "\${SSH_CONNECTION:-}" ]]; then `;
+		// Logic: Enable if in screen/tmux (always) OR (in SSH AND not in VS Code terminal)
+		code += `if [[ -n "\${STY:-}\${TMUX:-}" ]] || [[ -n "\${SSH_CONNECTION:-}" && ( -z "\${VSCODE_INJECTION:-}" || -z "\${TERM_PROGRAM:-}" || "\${TERM_PROGRAM}" != "vscode" ) ]]; then `;
 		code += `if [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]] && [[ "\${DEVBOOST_WORKSPACE:-}" == "${workspacePath}" ]]; then `;
 		code += `echo ""; echo ""; echo "⚠️  DevBoost tracking is already enabled in this session for this workspace(${workspaceName})."; `;
 		code += `elif [[ -n "\${DEVBOOST_TRACKING_ENABLED:-}" ]]; then `;
@@ -473,7 +477,7 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `return $exit_code; `;
 		code += `}; `;
 		code += `if [[ ! "\${PROMPT_COMMAND:-}" =~ devboost_log_command ]]; then `;
-		code += `PROMPT_COMMAND="devboost_log_command;\${PROMPT_COMMAND:+;\$PROMPT_COMMAND}"; `;
+		code += `if [[ -n "\${PROMPT_COMMAND:-}" ]]; then PROMPT_COMMAND="devboost_log_command;\$PROMPT_COMMAND"; else PROMPT_COMMAND="devboost_log_command"; fi; `;
 		code += `fi; `;
 		code += `echo ""; echo "✅ DevBoost tracking switched to workspace: ${workspaceName}"; `;
 		code += `else echo ""; echo "❌ Cancelled. Keeping tracking for workspace: \${current_workspace_name}"; fi; `;
@@ -498,18 +502,21 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `return $exit_code; `;
 		code += `}; `;
 		code += `if [[ ! "\${PROMPT_COMMAND:-}" =~ devboost_log_command ]]; then `;
-		code += `PROMPT_COMMAND="devboost_log_command;\${PROMPT_COMMAND:+;\$PROMPT_COMMAND}"; `;
+		code += `if [[ -n "\${PROMPT_COMMAND:-}" ]]; then PROMPT_COMMAND="devboost_log_command;\$PROMPT_COMMAND"; else PROMPT_COMMAND="devboost_log_command"; fi; `;
 		code += `fi; `;
 		code += `echo ""; echo ""; echo "✅ DevBoost tracking enabled in this terminal session for this workspace(${workspaceName})"; `;
 		code += `fi; `;
 		code += `else `;
 		code += `echo ""; echo ""; `;
-		code += `echo "⚠️  Warning: This terminal is not running inside a non-VSCode session (screen/tmux/SSH)."; `;
+		code += `echo "⚠️  Warning: This terminal is not running inside a trackable session."; `;
 		code += `echo ""; `;
 		code += `echo "   Tracking hooks are designed for:"; `;
-		code += `echo "     • screen sessions (STY environment variable)"; `;
-		code += `echo "     • tmux sessions (TMUX environment variable)"; `;
-		code += `echo "     • SSH sessions (SSH_CONNECTION environment variable)"; `;
+		code += `echo "     • screen sessions (STY) - even when started from VS Code terminal"; `;
+		code += `echo "     • tmux sessions (TMUX) - even when started from VS Code terminal"; `;
+		code += `echo "     • SSH sessions outside VS Code integrated terminal"; `;
+		code += `echo ""; `;
+		code += `echo "   Note: VS Code integrated terminals are automatically excluded"; `;
+		code += `echo "         (unless you enter screen/tmux from them)."; `;
 		code += `echo ""; `;
 		code += `echo "   Please enter your screen/tmux/SSH session first, then use this feature again."; `;
 		code += `fi`;
@@ -517,7 +524,8 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 	} else if (shell === 'powershell') {
 		// Compact script with formatted output messages
 		let code = '';
-		code += `if ($env:SSH_CONNECTION -or $PSSenderInfo) { `;
+		// Logic: Enable if in SSH/Remote PS AND not in VS Code terminal
+		code += `if (($env:SSH_CONNECTION -or $PSSenderInfo) -and ((-not $env:VSCODE_INJECTION) -or (-not $env:TERM_PROGRAM) -or ($env:TERM_PROGRAM -ne "vscode"))) { `;
 		code += `if ($env:DEVBOOST_TRACKING_ENABLED -and $env:DEVBOOST_WORKSPACE -eq "${workspacePath}") { `;
 		code += `Write-Host ""; Write-Host ""; Write-Host "⚠️  DevBoost tracking is already enabled in this session for this workspace(${workspaceName})." -ForegroundColor Yellow; `;
 		code += `} elseif ($env:DEVBOOST_TRACKING_ENABLED) { `;
@@ -567,11 +575,13 @@ function generateInlineHookCode(shell: string, logPath: string, workspacePath: s
 		code += `}; `;
 		code += `} else { `;
 		code += `Write-Host ""; Write-Host ""; `;
-		code += `Write-Host "⚠️  Warning: This terminal is not running inside a non-VSCode session (SSH/Remote PowerShell)." -ForegroundColor Yellow; `;
+		code += `Write-Host "⚠️  Warning: This terminal is not running inside a trackable session." -ForegroundColor Yellow; `;
 		code += `Write-Host ""; `;
 		code += `Write-Host "   Tracking hooks are designed for:" -ForegroundColor Yellow; `;
-		code += `Write-Host "     • SSH sessions (SSH_CONNECTION environment variable)" -ForegroundColor Yellow; `;
+		code += `Write-Host "     • SSH sessions outside VS Code integrated terminal" -ForegroundColor Yellow; `;
 		code += `Write-Host "     • Remote PowerShell sessions (PSSenderInfo)" -ForegroundColor Yellow; `;
+		code += `Write-Host ""; `;
+		code += `Write-Host "   Note: VS Code integrated terminals are automatically excluded." -ForegroundColor Yellow; `;
 		code += `Write-Host ""; `;
 		code += `Write-Host "   Please enter your SSH/Remote PowerShell session first, then use this feature again." -ForegroundColor Yellow; `;
 		code += `}`;
