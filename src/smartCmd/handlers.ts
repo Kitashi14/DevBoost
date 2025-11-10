@@ -10,6 +10,7 @@ import { CustomDialog } from '../commonView/customDialog';
 import { InputFormPanel } from '../commonView/inputFormPanel';
 import { ButtonFormPanel } from './view/manualButtonFormPanel';
 import { AIButtonDescriptionPanel } from './view/aiButtonDescriptionPanel';
+import { BulkEditPanel, BulkOperation } from './view/bulkEditPanel';
 
 // Create AI-suggested buttons based on activity log
 export async function createAIButtons( buttonsProvider: SmartCmdButtonsTreeProvider) {
@@ -849,4 +850,25 @@ Do you want to add it to global scope anyway?`;
 		vscode.window.showInformationMessage(`DevBoost: Button "${item.button.name}" added to global buttons${buttonType}.`);
 	}
 	// If addedCount is 0, addButtons already showed appropriate warning message
+}
+
+/**
+ * Open bulk edit panel for managing multiple buttons at once
+ */
+export async function openBulkEditPanel(buttonsProvider: SmartCmdButtonsTreeProvider): Promise<void> {
+	const buttons = buttonsProvider.getButtons();
+	
+	if (!buttons || buttons.length === 0) {
+		vscode.window.showInformationMessage('No buttons available to edit.');
+		return;
+	}
+	
+	BulkEditPanel.show(
+		buttons, 
+		async (operations: BulkOperation[]) => {
+			await buttonsProvider.performBulkOperations(operations);
+		},
+		() => buttonsProvider.getButtons(), // Getter function for fresh button data
+		buttonsProvider.onDidChangeTreeData // Event to listen for changes
+	);
 }

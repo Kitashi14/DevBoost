@@ -113,6 +113,11 @@
         "icon": "$(settings-gear)"
       },
       {
+        "command": "devboost.bulkEditButtons",
+        "title": "Bulk Edit Buttons",
+        "icon": "$(edit)"
+      },
+      {
         "command": "devboost.changePromptEnhancerAIModel",
         "title": "Change AI Model for Prompt Enhancer",
         "icon": "$(settings-gear)"
@@ -149,6 +154,11 @@
           "command": "devboost.refreshButtons",
           "when": "view == devboost.smartCmdView",
           "group": "navigation@3"
+        },
+        {
+          "command": "devboost.bulkEditButtons",
+          "when": "view == devboost.smartCmdView",
+          "group": "navigation@4"
         },
         {
           "command": "devboost.changeSmartCmdAIModel",

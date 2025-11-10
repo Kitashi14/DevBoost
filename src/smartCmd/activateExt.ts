@@ -120,6 +120,10 @@ export async function activateSmartCmd(
 		await configManager.changeAIModel('smartCmd', globalStoragePath);
 	});
 
+	const bulkEditButtonsDisposable = vscode.commands.registerCommand('devboost.bulkEditButtons', async () => {
+		await handlers.openBulkEditPanel(buttonsProvider);
+	});
+
 	// Register all SmartCmd commands
 	context.subscriptions.push(
 		createAIButtonsDisposable,
@@ -131,7 +135,8 @@ export async function activateSmartCmd(
 		refreshButtonsDisposable,
 		openButtonsFileDisposable,
 		openScriptFileDisposable,
-		changeSmartCmdAIModelDisposable
+		changeSmartCmdAIModelDisposable,
+		bulkEditButtonsDisposable
 	);
 
 	// Listen for workspace folder changes to reload buttons

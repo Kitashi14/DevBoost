@@ -2,10 +2,12 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import * as aiServices from './aiServices';
 import * as scriptManager from './scriptManager';
 import { CustomDialog } from '../commonView/customDialog';
 import { EditButtonFormPanel } from './view/editButtonFormPanel';
+import { BulkOperation } from './view/bulkEditPanel';
 
 // Input field interface for commands that need user input
 export interface InputField {
@@ -15,6 +17,7 @@ export interface InputField {
 
 // Button interface
 export interface smartCmdButton {
+	id?: string;                    // Unique identifier (UUID) for the button
 	name: string;
 	cmd: string;
 	user_prompt?: string;           // Prompt provided by the user
@@ -145,7 +148,11 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			try {
 				const content = await fs.readFile(this.globalButtonsPath, 'utf-8');
 				const globalButtons = JSON.parse(content);
-				this.buttons.push(...globalButtons.map((b: smartCmdButton) => ({ ...b, scope: 'global' as const })));
+				this.buttons.push(...globalButtons.map((b: smartCmdButton) => ({ 
+					...b, 
+					id: b.id || crypto.randomUUID(), // Generate UUID if missing
+					scope: 'global' as const 
+				})));
 			} catch {
 				// File doesn't exist or is invalid, no global buttons to load
 			}
@@ -159,7 +166,11 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			try {
 				const content = await fs.readFile(buttonsFilePath, 'utf-8');
 				const workspaceButtons = JSON.parse(content);
-				this.buttons.push(...workspaceButtons.map((b: smartCmdButton) => ({ ...b, scope: 'workspace' as const })));
+				this.buttons.push(...workspaceButtons.map((b: smartCmdButton) => ({ 
+					...b, 
+					id: b.id || crypto.randomUUID(), // Generate UUID if missing
+					scope: 'workspace' as const 
+				})));
 			} catch {
 				// File doesn't exist, no workspace buttons to load
 			}
@@ -329,12 +340,7 @@ What would you like to do?`;
 					}
 				} else if (result === 'Edit Existing then Add') {
 					// Let user edit the existing button
-					const existingIndex = this.buttons.findIndex(
-						b => b.name === dup.existingButton.name && 
-						     b.cmd === dup.existingButton.cmd && 
-						     b.scope === dup.existingButton.scope &&
-							 b.execDir === dup.existingButton.execDir
-					);
+					const existingIndex = this.buttons.findIndex(b => b.id === dup.existingButton.id);
 					if (existingIndex !== -1) {
 						const editedButton = await this.editNewButton(this.buttons[existingIndex]);
 						if (editedButton) {
@@ -355,12 +361,7 @@ What would you like to do?`;
 					validButtons.push(dup.newButton);
 				} else if (result === 'Replace Existing') {
 					// Remove the existing button and its script if it has one
-					const existingIndex = this.buttons.findIndex(
-						b => b.name === dup.existingButton.name && 
-						     b.cmd === dup.existingButton.cmd && 
-						     b.scope === dup.existingButton.scope &&
-							 b.execDir === dup.existingButton.execDir
-					);
+					const existingIndex = this.buttons.findIndex(b => b.id === dup.existingButton.id);
 					if (existingIndex !== -1) {
 						const existingButton = this.buttons[existingIndex];
 						// Delete script file if exists
@@ -400,7 +401,11 @@ What would you like to do?`;
 		// Add valid, non-duplicate buttons
 		const newButtons = validButtons.map(b => {
 			b.execDir = b.execDir && b.execDir.trim() !== '' ? b.execDir : '.';
-			return {...b, scope};
+			return {
+				...b, 
+				id: b.id || crypto.randomUUID(), // Generate UUID if missing
+				scope
+			};
 		});
 		this.buttons.push(...newButtons);
 		await this.saveButtons();
@@ -437,7 +442,7 @@ What would you like to do?`;
 			return;
 		}
 
-		const index = this.buttons.findIndex(b => b.name === item.button.name && b.cmd === item.button.cmd && b.scope === item.button.scope && b.execDir === item.button.execDir);
+		const index = this.buttons.findIndex(b => b.id === item.button.id);
 		if (index === -1) {
 			vscode.window.showWarningMessage(`DevBoost: Button "${item.button.name}" not found.`);
 			return;
@@ -472,13 +477,96 @@ What would you like to do?`;
 		}
 	}
 
+	async performBulkOperations(operations: BulkOperation[]): Promise<void> {
+		if (!operations || operations.length === 0) {
+			return;
+		}
+
+		let deleteCount = 0;
+		let updateCount = 0;
+		const errors: string[] = [];
+
+		// Process updates first
+		const updateOps = operations.filter(op => op.type === 'update');
+		const deleteOps = operations.filter(op => op.type === 'delete');
+
+		// Process updates - find by ID
+		for (const op of updateOps) {
+			try {
+				const button = this.buttons.find(b => b.id === op.buttonId);
+				if (!button) {
+					errors.push(`Button with ID ${op.buttonId} not found`);
+					continue;
+				}
+
+				if (op.changes?.execDir !== undefined) {
+					button.execDir = op.changes.execDir;
+					updateCount++;
+				}
+			} catch (error) {
+				errors.push(`Failed to update button: ${op.button.name}`);
+				console.error('Update error:', error);
+			}
+		}
+
+		// Process deletes - find by ID and remove
+		for (const op of deleteOps) {
+			try {
+				const index = this.buttons.findIndex(b => b.id === op.buttonId);
+				if (index === -1) {
+					errors.push(`Button with ID ${op.buttonId} not found`);
+					continue;
+				}
+
+				const button = this.buttons[index];
+
+				// Delete script file if exists
+				if (button.scriptFile && button.scope) {
+					await scriptManager.deleteScript(button.scriptFile, button.scope, this.globalStoragePath);
+				}
+
+				this.buttons.splice(index, 1);
+				deleteCount++;
+			} catch (error) {
+				errors.push(`Failed to delete button: ${op.button.name}`);
+				console.error('Delete error:', error);
+			}
+		}
+
+		// Save changes
+		try {
+			await this.saveButtons();
+			this.refresh();
+
+			// Show summary
+			const messages: string[] = [];
+			if (updateCount > 0) {
+				messages.push(`${updateCount} button${updateCount !== 1 ? 's' : ''} updated`);
+			}
+			if (deleteCount > 0) {
+				messages.push(`${deleteCount} button${deleteCount !== 1 ? 's' : ''} deleted`);
+			}
+
+			if (messages.length > 0) {
+				vscode.window.showInformationMessage(`DevBoost: ${messages.join(', ')}`);
+			}
+
+			if (errors.length > 0) {
+				vscode.window.showWarningMessage(`Some operations failed: ${errors.join(', ')}`);
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage('Failed to save changes');
+			console.error('Save error:', error);
+		}
+	}
+
 	async editButton(item: SmartCmdButtonTreeItem): Promise<void> {
 		if (!item || !item.button) {
 			vscode.window.showWarningMessage('DevBoost: Invalid button item.');
 			return;
 		}
 
-		const index = this.buttons.findIndex(b => b.name === item.button.name && b.cmd === item.button.cmd && b.scope === item.button.scope && b.execDir === item.button.execDir);
+		const index = this.buttons.findIndex(b => b.id === item.button.id);
 		if (index === -1) {
 			vscode.window.showWarningMessage(`DevBoost: Button "${item.button.name}" not found.`);
 			return;

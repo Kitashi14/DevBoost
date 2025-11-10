@@ -134,7 +134,7 @@ export async function checkDuplicateButton(
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.description || 'N/A';
 			const user_prompt = b.user_prompt || 'N/A';
-			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}`;
+			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}, ID: ${b.id}`;
 		}).join('\n');
 
 		const scopeContext = targetScope === 'global'
@@ -172,7 +172,7 @@ Don't consider buttons as duplicates if they:
 NOTE:
 If it's a duplicate/similar, respond with only JSON object containing the existing button's details.
 Eg:
-{"name": "🔨 Build Project", "execDir": "./backend", "description": "to build the project", "scope": "workspace"}
+{"ID": "provided-uuid"}
 
 If it's unique, respond with only "UNIQUE".`;
 
@@ -223,13 +223,10 @@ If it's unique, respond with only "UNIQUE".`;
 			
 			if (aiResponse) {
 				// Validate that we have the required fields
-				if (aiResponse.name && aiResponse.description && aiResponse.scope && aiResponse.execDir) {
+				if ( aiResponse.ID) {
 					// Find the button that matches ALL three fields
 					const matchingButton = buttonsToCheck.find(b => 
-						b.name === aiResponse.name && 
-						b.description === aiResponse.description &&
-						b.scope === aiResponse.scope &&
-						b.execDir === aiResponse.execDir
+						b.id === aiResponse.ID
 					);
 					
 					if (matchingButton) {
