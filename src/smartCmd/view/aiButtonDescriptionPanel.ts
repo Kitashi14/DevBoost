@@ -10,9 +10,10 @@ export class AIButtonDescriptionPanel {
 	/**
 	 * Show a form to get AI button description from user
 	 * @param defaultScope The default scope ('workspace' or 'global')
+	 * @param globalStoragePath The global storage path for the extension
 	 * @returns Promise resolving to description, scope and panel or null if cancelled
 	 */
-	public static async show(defaultScope: 'workspace' | 'global' = 'workspace'): Promise<AIButtonDescriptionResult | null> {
+	public static async show(defaultScope: 'workspace' | 'global' = 'workspace', globalStoragePath?: string): Promise<AIButtonDescriptionResult | null> {
 		return new Promise<AIButtonDescriptionResult | null>((resolve) => {
 			const panel = vscode.window.createWebviewPanel(
 				'aiButtonDescription',
@@ -28,7 +29,7 @@ export class AIButtonDescriptionPanel {
 
 			// Handle messages from the webview
 			panel.webview.onDidReceiveMessage(
-				message => {
+				async message => {
 					if (message.command === 'submit') {
 						const result: AIButtonDescriptionResult = {
 							description: message.data.description,
@@ -45,6 +46,41 @@ export class AIButtonDescriptionPanel {
 						}, 50);
 						
 						resolve(null);
+					} else if (message.command === 'enhancePrompt') {
+						// Import the AI service function
+						const { enhancePrompt } = await import('../aiServices.js');
+						const enhanced = await enhancePrompt(message.data.originalPrompt, message.data.scope, globalStoragePath);
+
+						if(!enhanced) {
+							panel.webview.postMessage({
+								command: 'enhanceError',
+								error: 'Failed to enhance prompt. Please try again.'
+							});
+							return;
+						}
+
+						// Validate the response
+						if (enhanced.length < 10) {
+							panel.webview.postMessage({
+								command: 'enhanceError',
+								error: 'Enhanced prompt too short. Please try again.'
+							});
+							return;
+						}
+
+						// Don't allow responses that are too similar to original (AI didn't enhance)
+						if (enhanced.toLowerCase() === message.data.originalPrompt.toLowerCase()) {
+							panel.webview.postMessage({
+								command: 'enhanceError',
+								error: 'Enhanced prompt is identical to the original. Please try again with a different description.'
+							});
+							return;
+						}
+						
+						panel.webview.postMessage({
+							command: 'enhancedPrompt',
+							enhancedPrompt: enhanced
+						});
 					}
 				},
 				undefined
@@ -410,6 +446,10 @@ export class AIButtonDescriptionPanel {
 			transform: none;
 		}
 
+		textarea:disabled {
+		    opacity: 0.6;
+		}
+
 		.btn-primary {
 			background-color: var(--vscode-button-background);
 			color: var(--vscode-button-foreground);
@@ -433,6 +473,128 @@ export class AIButtonDescriptionPanel {
 			color: var(--vscode-descriptionForeground);
 			text-align: right;
 			margin-top: 4px;
+		}
+
+		/* Textarea actions row */
+		.textarea-actions {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-top: 6px;
+		}
+
+		.sparkle-btn {
+			background-color: var(--vscode-button-secondaryBackground);
+			color: var(--vscode-button-secondaryForeground);
+			border: 1px solid var(--vscode-input-border);
+			border-radius: 4px;
+			padding: 5px 12px;
+			font-size: 13px;
+			cursor: pointer;
+			transition: all 0.15s ease;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.sparkle-btn:hover:not(:disabled) {
+			background-color: var(--vscode-button-secondaryHoverBackground);
+			transform: scale(1.02);
+		}
+
+		.sparkle-btn:active:not(:disabled) {
+			transform: scale(0.98);
+		}
+
+		.sparkle-btn:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+			transform: none;
+		}
+
+		.sparkle-btn.enhancing {
+			animation: pulse 1.5s ease-in-out infinite;
+		}
+
+		@keyframes pulse {
+			0%, 100% { opacity: 1; }
+			50% { opacity: 0.5; }
+		}
+
+		.sparkle-btn .icon {
+			font-size: 14px;
+		}
+
+		.sparkle-btn .text {
+			font-size: 12px;
+			font-weight: 500;
+		}
+
+		/* Prompt History */
+		.prompt-history {
+			background-color: var(--vscode-editorWidget-background);
+			border: 1px solid var(--vscode-editorWidget-border);
+			border-radius: 4px;
+			padding: 12px;
+			margin-bottom: 12px;
+			display: none;
+			animation: slideUp 0.3s ease-out;
+		}
+
+		.prompt-history.show {
+			display: block;
+		}
+
+		.prompt-history-header {
+			font-size: 12px;
+			font-weight: 600;
+			color: var(--vscode-foreground);
+			margin-bottom: 8px;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.prompt-history-items {
+			max-height: 250px;
+			overflow-y: auto;
+		}
+
+		.prompt-history-item {
+			background-color: var(--vscode-editor-background);
+			border: 1px solid var(--vscode-input-border);
+			border-radius: 3px;
+			padding: 8px;
+			margin-bottom: 6px;
+			font-size: 12px;
+			color: var(--vscode-descriptionForeground);
+			cursor: pointer;
+			transition: all 0.15s ease;
+			position: relative;
+			padding-right: 30px;
+		}
+
+		.prompt-history-item:hover {
+			border-color: var(--vscode-focusBorder);
+			background-color: var(--vscode-list-hoverBackground);
+			color: var(--vscode-foreground);
+		}
+
+		.prompt-history-item:last-child {
+			margin-bottom: 0;
+		}
+
+		.prompt-history-item .restore-icon {
+			position: absolute;
+			right: 8px;
+			top: 50%;
+			transform: translateY(-50%);
+			font-size: 14px;
+			opacity: 0.6;
+		}
+
+		.prompt-history-item:hover .restore-icon {
+			opacity: 1;
 		}
 
 		/* Loader Overlay */
@@ -621,13 +783,33 @@ export class AIButtonDescriptionPanel {
 			</div>
 			<div class="form-group">
 				<label for="description">Prompt (Your despcription)<span class="required">*</span></label>
+				
+				<!-- Prompt History Section -->
+				<div class="prompt-history" id="promptHistory">
+					<div class="prompt-history-header">
+						<span>📜</span>
+						<span>Previous Versions</span>
+					</div>
+					<div class="prompt-history-items" id="promptHistoryItems">
+						<!-- Will be populated dynamically -->
+					</div>
+				</div>
+
 				<textarea 
 					id="description" 
 					placeholder="e.g., Button to add changes and commit code using git with a custom message"
 					rows="4"
 				></textarea>
+				
+				<div class="textarea-actions">
+					<button type="button" class="sparkle-btn" id="sparkleBtn" title="Enhance prompt with AI" disabled>
+						<span class="icon">✨</span>
+						<span class="text">Enhance</span>
+					</button>
+					<div class="char-count"><span id="charCount">0</span> characters</div>
+				</div>
+				
 				<div class="error-message" id="descriptionError"></div>
-				<div class="char-count"><span id="charCount">0</span> characters</div>
 			</div>
 			<div class="button-group">
 				<button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
@@ -713,6 +895,7 @@ export class AIButtonDescriptionPanel {
 		const descriptionTextarea = document.getElementById('description');
 		const submitBtn = document.getElementById('submitBtn');
 		const cancelBtn = document.getElementById('cancelBtn');
+		const sparkleBtn = document.getElementById('sparkleBtn');
 		const descriptionError = document.getElementById('descriptionError');
 		const charCount = document.getElementById('charCount');
 		const examples = document.querySelectorAll('.example');
@@ -720,6 +903,11 @@ export class AIButtonDescriptionPanel {
 		const errorOverlay = document.getElementById('errorOverlay');
 		const errorMessage = document.getElementById('errorMessage');
 		const errorCloseBtn = document.getElementById('errorCloseBtn');
+		const promptHistory = document.getElementById('promptHistory');
+		const promptHistoryItems = document.getElementById('promptHistoryItems');
+
+		let promptHistoryStack = []; // Stack to store previous prompts
+		let isEnhancing = false;
 
 		// Restore saved state if available
 		const vscodeState = vscode.getState();
@@ -732,13 +920,18 @@ export class AIButtonDescriptionPanel {
 			if (vscodeState.scope !== undefined) {
 				scopeSelect.value = vscodeState.scope;
 			}
+			if (vscodeState.promptHistoryStack !== undefined) {
+				promptHistoryStack = vscodeState.promptHistoryStack;
+				updatePromptHistoryUI();
+			}
 		}
 
 		// Save state whenever form values change
 		function saveState() {
 			vscode.setState({
 				description: descriptionTextarea.value,
-				scope: scopeSelect.value
+				scope: scopeSelect.value,
+				promptHistoryStack: promptHistoryStack
 			});
 		}
 
@@ -756,6 +949,40 @@ export class AIButtonDescriptionPanel {
 				errorOverlay.classList.add('show');
 				submitBtn.disabled = false;
 				cancelBtn.disabled = false;
+			} else if (message.command === 'enhancedPrompt') {
+				// Store current prompt in history before replacing
+				const currentPrompt = descriptionTextarea.value.trim();
+				if (currentPrompt && !promptHistoryStack.includes(currentPrompt)) {
+					promptHistoryStack.push(currentPrompt);
+					if (promptHistoryStack.length > 5) {
+						promptHistoryStack.shift(); // Keep only last 5
+					}
+				}
+
+				// Replace with enhanced prompt
+				descriptionTextarea.value = message.enhancedPrompt;
+				validateDescription();
+				updateCharCount();
+				updatePromptHistoryUI();
+				saveState();
+
+				// Reset sparkle button
+				isEnhancing = false;
+				descriptionTextarea.disabled = false;
+				sparkleBtn.classList.remove('enhancing');
+				sparkleBtn.disabled = false;
+				sparkleBtn.innerHTML = '<span class="icon">✨</span><span class="text">Enhance</span>';
+			} else if (message.command === 'enhanceError') {
+				// Show error message
+				descriptionError.textContent = message.error || 'Failed to enhance prompt. Please try again.';
+				descriptionTextarea.classList.add('error');
+				
+				// Reset sparkle button
+				isEnhancing = false;
+				descriptionTextarea.disabled = false;
+				sparkleBtn.classList.remove('enhancing');
+				sparkleBtn.disabled = false;
+				sparkleBtn.innerHTML = '<span class="icon">✨</span><span class="text">Enhance</span>';
 			}
 		});
 
@@ -764,6 +991,68 @@ export class AIButtonDescriptionPanel {
 			errorOverlay.classList.remove('show');
 			// Close the webview panel
 			vscode.postMessage({ command: 'cancel' });
+		});
+
+		// Update prompt history UI
+		function updatePromptHistoryUI() {
+			if (promptHistoryStack.length === 0) {
+				promptHistory.classList.remove('show');
+				return;
+			}
+
+			promptHistory.classList.add('show');
+			promptHistoryItems.innerHTML = '';
+
+			// Show in reverse order (most recent first)
+			for (let i = promptHistoryStack.length - 1; i >= 0; i--) {
+				const prompt = promptHistoryStack[i];
+				const item = document.createElement('div');
+				item.className = 'prompt-history-item';
+				item.title = 'Click to restore this version';
+				
+				// Truncate if too long
+				const displayText = prompt;
+				item.innerHTML = displayText + '<span class="restore-icon">↻</span>';
+				
+				item.addEventListener('click', () => {
+					descriptionTextarea.value = prompt;
+					validateDescription();
+					updateCharCount();
+					descriptionTextarea.focus();
+				});
+
+				promptHistoryItems.appendChild(item);
+			}
+		}
+
+		// Handle sparkle button click
+		sparkleBtn.addEventListener('click', () => {
+			if (isEnhancing) {
+				return;
+			}
+
+			const currentPrompt = descriptionTextarea.value.trim();
+			if (!currentPrompt || currentPrompt.length < 10) {
+				descriptionError.textContent = 'Please enter a description first (at least 10 characters)';
+				descriptionTextarea.classList.add('error');
+				return;
+			}
+
+			// Set enhancing state
+			isEnhancing = true;
+			descriptionTextarea.disabled = true;
+			sparkleBtn.classList.add('enhancing');
+			sparkleBtn.disabled = true;
+			sparkleBtn.innerHTML = '<span class="icon">✨</span><span class="text">Enhancing...</span>';
+
+			// Send message to extension
+			vscode.postMessage({
+				command: 'enhancePrompt',
+				data: {
+					originalPrompt: currentPrompt,
+					scope: scopeSelect.value
+				}
+			});
 		});
 
 		// Handle example clicks
@@ -788,9 +1077,10 @@ export class AIButtonDescriptionPanel {
 			const value = descriptionTextarea.value.trim();
 			
 			if (!value) {
-				descriptionError.textContent = 'Please describe what you want your button to do';
-				descriptionTextarea.classList.add('error');
+				descriptionError.textContent = '';
+				descriptionTextarea.classList.remove('error');
 				submitBtn.disabled = true;
+				sparkleBtn.disabled = true;
 				return false;
 			}
 			
@@ -798,6 +1088,7 @@ export class AIButtonDescriptionPanel {
 				descriptionError.textContent = 'Description is too short. Please be more specific (at least 10 characters)';
 				descriptionTextarea.classList.add('error');
 				submitBtn.disabled = true;
+				sparkleBtn.disabled = true;
 				return false;
 			}
 
@@ -805,12 +1096,14 @@ export class AIButtonDescriptionPanel {
 				descriptionError.textContent = 'Description is too long (max 500 characters)';
 				descriptionTextarea.classList.add('error');
 				submitBtn.disabled = true;
+				sparkleBtn.disabled = value.length > 500;
 				return false;
 			}
 			
 			descriptionError.textContent = '';
 			descriptionTextarea.classList.remove('error');
 			submitBtn.disabled = false;
+			sparkleBtn.disabled = isEnhancing;
 			return true;
 		}
 

@@ -2,7 +2,7 @@
   "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "Boost your productivity through AI-driven tools.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "DevBoost",
   "repository": {
     "type": "git",

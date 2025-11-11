@@ -365,7 +365,7 @@ export async function createCustomButton(
 
 	try {
 		// Show the AI button description form
-		const result = await AIButtonDescriptionPanel.show(scopeInput === 'Global' ? 'global' : 'workspace');
+		const result = await AIButtonDescriptionPanel.show(scopeInput === 'Global' ? 'global' : 'workspace', globalStoragePath);
 
 		if (!result) {
 			vscode.window.showInformationMessage('Button creation cancelled.');
