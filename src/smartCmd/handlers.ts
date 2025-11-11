@@ -869,6 +869,7 @@ export async function openBulkEditPanel(buttonsProvider: SmartCmdButtonsTreeProv
 			await buttonsProvider.performBulkOperations(operations);
 		},
 		() => buttonsProvider.getButtons(), // Getter function for fresh button data
+		buttonsProvider.globalStoragePath, // Global storage path for opening scripts
 		buttonsProvider.onDidChangeTreeData // Event to listen for changes
 	);
 }

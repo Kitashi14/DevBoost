@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { smartCmdButton } from '../treeProvider';
+import { getScriptsDir } from '../scriptManager';
 
 export class BulkEditPanel {
 	private static currentPanel: BulkEditPanel | undefined;
@@ -9,16 +10,19 @@ export class BulkEditPanel {
 	private disposables: vscode.Disposable[] = [];
 	private buttons: smartCmdButton[];
 	private treeDataChangeListener: vscode.Disposable | undefined;
+	private globalStoragePath: string;
 
 	private constructor(
 		panel: vscode.WebviewPanel,
 		buttons: smartCmdButton[],
 		private onComplete: (operations: BulkOperation[]) => Promise<void>,
 		private getUpdatedButtons: () => smartCmdButton[],
+		globalStoragePath: string,
 		onDidChangeTreeData?: vscode.Event<any>
 	) {
 		this.panel = panel;
 		this.buttons = buttons;
+		this.globalStoragePath = globalStoragePath;
 
 		// Set up webview content
 		this.panel.webview.html = this.getHtmlContent();
@@ -40,6 +44,34 @@ export class BulkEditPanel {
 						break;
 					case 'cancel':
 						this.dispose();
+						break;
+					case 'openScript':
+						// Open the script file
+						if (message.buttonId) {
+							const button = this.buttons.find(b => b.id === message.buttonId);
+							if (button?.scriptFile && button.scope) {
+								const scriptsDir = getScriptsDir(button.scope, this.globalStoragePath);
+								if (scriptsDir) {
+									const scriptPath = path.join(scriptsDir, button.scriptFile);
+									try {
+										const doc = await vscode.workspace.openTextDocument(scriptPath);
+										await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Two, preview: false });
+									} catch (error) {
+										vscode.window.showErrorMessage(`Failed to open script: ${error instanceof Error ? error.message : 'Unknown error'}`);
+									}
+								}
+							}
+						}
+						break;
+					case 'editButton':
+						// Open the edit form for the button
+						if (message.buttonId) {
+							const button = this.buttons.find(b => b.id === message.buttonId);
+							if (button) {
+								// Trigger the edit command
+								await vscode.commands.executeCommand('devboost.editButton', { button });
+							}
+						}
 						break;
 				}
 			},
@@ -86,6 +118,7 @@ export class BulkEditPanel {
 		buttons: smartCmdButton[],
 		onComplete: (operations: BulkOperation[]) => Promise<void>,
 		getUpdatedButtons: () => smartCmdButton[],
+		globalStoragePath: string,
 		onDidChangeTreeData?: vscode.Event<any>
 	): void {
 		// If panel already exists, reveal it
@@ -110,6 +143,7 @@ export class BulkEditPanel {
 			buttons, 
 			onComplete, 
 			getUpdatedButtons,
+			globalStoragePath,
 			onDidChangeTreeData
 		);
 	}
@@ -275,7 +309,22 @@ export class BulkEditPanel {
 		.badge-script {
 			background-color: var(--vscode-charts-green);
 			color: var(--vscode-editor-background);
-			margin-left: 4px;
+			margin-top: 4px;
+			cursor: pointer;
+			transition: opacity 0.15s ease;
+		}
+		
+		.badge-script:hover {
+			opacity: 0.80;
+		}
+		
+		.button-name {
+			cursor: pointer;
+			transition: color 0.15s ease;
+		}
+		
+		.button-name:hover {
+			color: var(--vscode-textLink-activeForeground);
 		}
 		
 		.command-preview {
@@ -602,9 +651,9 @@ export class BulkEditPanel {
 									onchange="toggleScopeSelection('\${button.scope}')"
 									title="Select all \${button.scope} buttons"
 								>
-								<label for="\${button.scope}ScopeCheckbox" style="cursor: pointer;">
+								<span>
 									\${button.scope === 'global' ? '🌐 Global Commands' : '📁 Workspace Commands'}
-								</label>
+								</span>
 							</div>
 						</td>
 					\`;
@@ -627,7 +676,7 @@ export class BulkEditPanel {
 					: '<span class="badge badge-workspace">Workspace</span>';
 				
 				const scriptBadge = button.scriptFile 
-					? '<span class="badge badge-script">📜 Script</span>' 
+					? '<span class="badge badge-script" onclick="openScript(\\'' + escapeHtml(buttonId) + '\\')" title="Click to open script file: ' + escapeHtml(button.scriptFile) + '">📜 Script</span>' 
 					: '';
 				
 				const currentExecDir = modifiedExecDirs.get(buttonId) !== undefined 
@@ -651,7 +700,7 @@ export class BulkEditPanel {
 						</div>
 					</td>
 					<td>
-						<strong>\${escapeHtml(button.name)}</strong>
+						<strong class="button-name" onclick="editButton('\${escapeHtml(buttonId)}')" title="Click to edit button">\${escapeHtml(button.name)}</strong>
 						\${scriptBadge}
 					</td>
 					<td>\${scopeBadge}</td>
@@ -837,6 +886,22 @@ export class BulkEditPanel {
 			modifiedExecDirs.delete(id);
 			buttonsToDelete.delete(id);
 			renderTable();
+		}
+		
+		function openScript(buttonId) {
+			// Send message to extension to open the script file
+			vscode.postMessage({
+				command: 'openScript',
+				buttonId: buttonId
+			});
+		}
+		
+		function editButton(buttonId) {
+			// Send message to extension to open the edit form
+			vscode.postMessage({
+				command: 'editButton',
+				buttonId: buttonId
+			});
 		}
 		
 		function bulkSetExecDir() {
