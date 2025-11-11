@@ -860,7 +860,7 @@ export class AIButtonDescriptionPanel {
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"<span class="json-emoji">🐛</span> Run Tests"</span><span class="json-punctuation">,</span>
     <span class="json-key">"execDir"</span><span class="json-punctuation">:</span> <span class="json-string">"&lt;workspace&gt;/tests"</span><span class="json-punctuation">,</span>
     <span class="json-key">"scriptFile"</span><span class="json-punctuation">:</span> <span class="json-string">"_run_tests.sh"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\\"&lt;workspace&gt;/.vscode/devBoost/scripts/_run_tests.sh\\""</span><span class="json-punctuation">,</span>
+    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\\"/path/to/scripts/_run_tests.sh\\""</span><span class="json-punctuation">,</span>
     <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Runs test suite using custom script"</span><span class="json-punctuation">,</span>
     <span class="json-key">"description"</span><span class="json-punctuation">:</span> <span class="json-string">"Button to run tests with custom script"</span>
   <span class="json-punctuation">},</span>
@@ -868,7 +868,7 @@ export class AIButtonDescriptionPanel {
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"<span class="json-emoji">🚀</span> Deploy with Params"</span><span class="json-punctuation">,</span>
     <span class="json-key">"execDir"</span><span class="json-punctuation">:</span> <span class="json-string">"."</span><span class="json-punctuation">,</span>
     <span class="json-key">"scriptFile"</span><span class="json-punctuation">:</span> <span class="json-string">"_deploy.sh"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\"&lt;globalScripts&gt;/_deploy.sh\" {environment} {version}"</span><span class="json-punctuation">,</span>
+    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\\"/path/to/scripts/_deploy.sh\\" {environment} {version}"</span><span class="json-punctuation">,</span>
     <span class="json-key">"inputs"</span><span class="json-punctuation">:</span> <span class="json-punctuation">[</span>
       <span class="json-punctuation">{</span>
         <span class="json-key">"placeholder"</span><span class="json-punctuation">:</span> <span class="json-string">"Environment (dev/staging/prod)"</span><span class="json-punctuation">,</span>
