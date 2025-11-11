@@ -1,9 +1,13 @@
 {
-  "name": "devboost",
+  "name": "devboostextension",
   "displayName": "DevBoost",
-  "description": "DevBoost is a Visual Studio Code extension built to supercharge developer productivity through AI-driven automation and workflow optimization. Features include SmartCmd for one-click automation buttons, Prompt Enhancer for improving AI interactions (like Webex rewrite message), and intelligent activity logging for better AI suggestions.",
-  "version": "0.2.0",
-  "publisher": "devboost",
+  "description": "Boost your productivity through AI-driven tools.",
+  "version": "0.6.1",
+  "publisher": "DevBoost",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kitashi14/DevBoost"
+  },
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -104,14 +108,29 @@
         "icon": "$(file-code)"
       },
       {
-        "command": "devboost.changeSmartCmdAIModel",
-        "title": "Change AI Model for SmartCmd",
+        "command": "devboost.configureSmartCmdAIModel",
+        "title": "Configure AI Model for SmartCmd",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "devboost.changePromptEnhancerAIModel",
-        "title": "Change AI Model for Prompt Enhancer",
+        "command": "devboost.bulkEditButtons",
+        "title": "Bulk Edit Buttons",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "devboost.configurePromptEnhancerAIModel",
+        "title": "Configure AI Model for Prompt Enhancer",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "devboost.enableTrackingInCurrentSession",
+        "title": "Enable Tracking Non-VScode Terminal Session",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "devboost.disableTrackingInCurrentSession",
+        "title": "Disable Tracking Non-VScode Terminal Session",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {
@@ -137,14 +156,29 @@
           "group": "navigation@3"
         },
         {
-          "command": "devboost.changeSmartCmdAIModel",
+          "command": "devboost.bulkEditButtons",
           "when": "view == devboost.smartCmdView",
           "group": "navigation@4"
         },
         {
-          "command": "devboost.changePromptEnhancerAIModel",
+          "command": "devboost.configureSmartCmdAIModel",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@1"
+        },
+        {
+          "command": "devboost.enableTrackingInCurrentSession",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@2"
+        },
+        {
+          "command": "devboost.disableTrackingInCurrentSession",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@3"
+        },
+        {
+          "command": "devboost.configurePromptEnhancerAIModel",
           "when": "view == devboost.promptEnhancerView",
-          "group": "navigation@1"
+          "group": "z_tracking@1"
         }
       ],
       "view/item/context": [

@@ -9,6 +9,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+*.diff
 
 # Exclude test files
 test-enhanced-logging.js
@@ -18,7 +19,6 @@ out/test/**
 
 # Exclude personal and development files
 personal_notes.txt
-exampleButtons.json
 HACKATHON_PRESENTATION.md
 
 # Exclude development scripts

@@ -10,15 +10,17 @@ import { CustomDialog } from '../commonView/customDialog';
 import { InputFormPanel } from '../commonView/inputFormPanel';
 import { ButtonFormPanel } from './view/manualButtonFormPanel';
 import { AIButtonDescriptionPanel } from './view/aiButtonDescriptionPanel';
+import { BulkEditPanel, BulkOperation } from './view/bulkEditPanel';
 
 // Create AI-suggested buttons based on activity log
-export async function createAIButtons( activityLogPath: string | undefined, buttonsProvider: SmartCmdButtonsTreeProvider) {
+export async function createAIButtons( buttonsProvider: SmartCmdButtonsTreeProvider) {
 	// Check if workspace is open
 	if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 		vscode.window.showErrorMessage('Please open a workspace to use SmartCmd.');
 		return;
 	}
 
+	const activityLogPath = activityLogging.getCurrentActivityLogPath();
 	if (!activityLogPath) {
 		vscode.window.showErrorMessage('Activity log path not initialized.');
 		return;
@@ -100,7 +102,7 @@ export async function createAIButtons( activityLogPath: string | undefined, butt
 			vscode.window.showWarningMessage('Could not generate button suggestions. Please try again.');
 			return;
 		}
-
+		let acceptedCount = 0;
 		// Show confirmation dialog with preview of AI-suggested buttons
 		const previewMessage = `AI has analyzed your workflow and suggests ${buttons.length} button${buttons.length > 1 ? 's' : ''}:
 
@@ -146,7 +148,6 @@ Do you want to create these buttons?`;
 		let finalButtons = buttons;
 
 		if (choice === 'Review Individually') {
-			let acceptedCount = 0;
 			let buttonCount = 0;
 			for (const button of buttons) {
 				buttonCount += 1;
@@ -295,24 +296,17 @@ What would you like to do?`,
 					// Skip this button
 					continue;
 				} else {
-						return;
+					vscode.window.showInformationMessage(`Button review cancelled. ${acceptedCount} button${acceptedCount !== 1 ? 's' : ''} created.`);
+					return;
 				}
 			}
-
-			if (acceptedCount === 0) {
-				vscode.window.showInformationMessage('No buttons were selected.');
-			} else {
-				vscode.window.showInformationMessage(`Created ${acceptedCount} AI-suggested button${acceptedCount > 1 ? 's' : ''}`);
-			}
+			vscode.window.showInformationMessage(`Button review completed. ${acceptedCount} button${acceptedCount !== 1 ? 's' : ''} created.`);
 			return;
 		}
 
 		// Add buttons to tree view (only for 'Create All' choice)
-		const addedCount = await buttonsProvider.addButtons(finalButtons, 'workspace');
+		await buttonsProvider.addButtons(finalButtons, 'workspace');
 
-		if (addedCount > 0) {
-			vscode.window.showInformationMessage(`Created ${addedCount} AI-suggested button${addedCount > 1 ? 's' : ''}`);
-		}
 	} catch (error: any) {
 		console.error('DevBoost: Error creating AI buttons:', error);
 		
@@ -334,11 +328,11 @@ What would you like to do?`,
 
 // Create a custom button (manual or AI-assisted)
 export async function createCustomButton(
-	activityLogPath: string | undefined,
 	globalStoragePath: string | undefined,
 	buttonsProvider: SmartCmdButtonsTreeProvider,
 	scopeInput?: 'Workspace' | 'Global'
 ) {
+	const activityLogPath = activityLogging.getCurrentActivityLogPath();
 	if(!scopeInput) {
 		scopeInput = 'Global';
 	}
@@ -365,17 +359,13 @@ export async function createCustomButton(
 		delete (button as any).selectedScope;
 
 		// Add button to tree view using the scope selected in the form
-		const addedCount = await buttonsProvider.addButtons([button], selectedScope);
-
-		if (addedCount > 0) {
-			vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
-		}
+		await buttonsProvider.addButtons([button], selectedScope);
 		return;
 	}
 
 	try {
 		// Show the AI button description form
-		const result = await AIButtonDescriptionPanel.show(scopeInput === 'Global' ? 'global' : 'workspace');
+		const result = await AIButtonDescriptionPanel.show(scopeInput === 'Global' ? 'global' : 'workspace', globalStoragePath);
 
 		if (!result) {
 			vscode.window.showInformationMessage('Button creation cancelled.');
@@ -583,11 +573,7 @@ Do you want to create this button?`;
 		}
 
 		// Add button to tree view using the selected scope from the form
-		const addedCount = await buttonsProvider.addButtons([button], selectedScope);
-
-		if (addedCount > 0) {
-			vscode.window.showInformationMessage(`Created custom button: ${button.name}`);
-		}
+		await buttonsProvider.addButtons([button], selectedScope);
 
 	} catch (error) {
 		console.error('Error creating custom button:', error);
@@ -864,4 +850,26 @@ Do you want to add it to global scope anyway?`;
 		vscode.window.showInformationMessage(`DevBoost: Button "${item.button.name}" added to global buttons${buttonType}.`);
 	}
 	// If addedCount is 0, addButtons already showed appropriate warning message
+}
+
+/**
+ * Open bulk edit panel for managing multiple buttons at once
+ */
+export async function openBulkEditPanel(buttonsProvider: SmartCmdButtonsTreeProvider): Promise<void> {
+	const buttons = buttonsProvider.getButtons();
+	
+	if (!buttons || buttons.length === 0) {
+		vscode.window.showInformationMessage('No buttons available to edit.');
+		return;
+	}
+	
+	BulkEditPanel.show(
+		buttons, 
+		async (operations: BulkOperation[]) => {
+			await buttonsProvider.performBulkOperations(operations);
+		},
+		() => buttonsProvider.getButtons(), // Getter function for fresh button data
+		buttonsProvider.globalStoragePath, // Global storage path for opening scripts
+		buttonsProvider.onDidChangeTreeData // Event to listen for changes
+	);
 }

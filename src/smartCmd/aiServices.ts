@@ -79,6 +79,96 @@ export function getSystemInfo(): { platform: string; shell: string} {
 }
 
 /**
+ * Enhance user's prompt for button generation using AI
+ * Returns enhanced prompt or null if failed
+ */
+export async function enhancePrompt(
+	originalPrompt: string,
+	scope: 'workspace' | 'global',
+	globalStoragePath?: string
+): Promise<string | null> {
+	try {
+		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
+		
+		if (!model) {
+			console.log('No AI model available for prompt enhancement');
+			return null;
+		}
+
+		const { platform, shell } = getSystemInfo();
+
+		const prompt = `You are an expert at helping developers create precise command descriptions for automation buttons.
+
+Your task: Enhance the user's description to be more specific and actionable while preserving their intent.
+
+User's Original Description:
+"${originalPrompt}"
+
+Target Scope: ${scope}
+System: ${platform} | Shell: ${shell}
+
+ENHANCEMENT GUIDELINES:
+1. **Be Specific**: Add technical details about tools/commands if obvious (e.g., "commit code" → "commit code using git")
+2. **Preserve Intent**: Keep the user's core goal unchanged
+3. **Add Context**: Mention if inputs are needed (e.g., "with custom message" implies user input)
+4. **Workflow Clarity**: For multi-step tasks, make the sequence explicit (e.g., "install and start" → "run npm install and then start the development server")
+5. **Scope-Aware**: 
+   - For workspace: Mention project-specific context if applicable
+   - For global: Keep it generic and universally applicable
+6. **Command Hints**: Suggest specific tools when obvious (npm, git, docker, etc.)
+
+EXAMPLES OF GOOD ENHANCEMENTS:
+
+Original: "commit changes"
+Enhanced: "Button to add all changes and commit code using git with a custom message"
+
+Original: "start dev server"
+Enhanced: "Create a button that runs npm install and then starts the development server"
+
+Original: "run tests"
+Enhanced: "Button to run all tests and generate a coverage report using npm test"
+
+Original: "deploy to prod"
+Enhanced: "Deploy to production environment with confirmation prompt for environment selection"
+
+Original: "backup project"
+Enhanced: "Create a backup script that archives the current project with timestamp in filename"
+
+Original: "clean build"
+Enhanced: "Button to remove build artifacts and run a fresh build using npm clean and npm build"
+
+IMPORTANT:
+- Keep enhanced description under 150 words
+- Use natural language, not code
+- Don't over-complicate simple requests
+- If the original is already detailed, make only minor improvements
+
+Respond with ONLY the enhanced description text, nothing else.`;
+
+		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+
+		let fullResponse = '';
+		for await (const part of response.text) {
+			fullResponse += part;
+		}
+
+		// Log prompt for development
+		await logPromptToFile('enhancePrompt', prompt, fullResponse, {
+			originalPrompt,
+			scope,
+			model: model.family
+		});
+
+		return fullResponse.trim();
+
+	} catch (error) {
+		console.error('Error enhancing prompt:', error);
+		return null;
+	}
+}
+
+/**
  * AI-powered duplicate detection using semantic similarity
  * Returns the existing button if duplicate found, null otherwise
  */
@@ -134,7 +224,7 @@ export async function checkDuplicateButton(
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.description || 'N/A';
 			const user_prompt = b.user_prompt || 'N/A';
-			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}`;
+			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}, ID: ${b.id}`;
 		}).join('\n');
 
 		const scopeContext = targetScope === 'global'
@@ -172,7 +262,7 @@ Don't consider buttons as duplicates if they:
 NOTE:
 If it's a duplicate/similar, respond with only JSON object containing the existing button's details.
 Eg:
-{"name": "🔨 Build Project", "execDir": "./backend", "description": "to build the project", "scope": "workspace"}
+{"ID": "provided-uuid"}
 
 If it's unique, respond with only "UNIQUE".`;
 
@@ -223,13 +313,10 @@ If it's unique, respond with only "UNIQUE".`;
 			
 			if (aiResponse) {
 				// Validate that we have the required fields
-				if (aiResponse.name && aiResponse.description && aiResponse.scope && aiResponse.execDir) {
+				if ( aiResponse.ID) {
 					// Find the button that matches ALL three fields
 					const matchingButton = buttonsToCheck.find(b => 
-						b.name === aiResponse.name && 
-						b.description === aiResponse.description &&
-						b.scope === aiResponse.scope &&
-						b.execDir === aiResponse.execDir
+						b.id === aiResponse.ID
 					);
 					
 					if (matchingButton) {

@@ -22,6 +22,22 @@ interface LogContext {
 // Track current working directory for each terminal
 const terminalDirectories = new Map<string, string>();
 
+// Track pending command executions (for 5-second timeout logging)
+// Map: execution object → timeout handle
+const pendingExecutions = new Map<any, NodeJS.Timeout>();
+
+/**
+ * Get the current workspace's activity log path
+ * Always returns the current workspace's path, even if workspace changes
+ */
+export function getCurrentActivityLogPath(): string | undefined {
+    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+        return path.join(workspaceRoot, '.vscode', 'devBoost', 'activity.log');
+    }
+    return undefined;
+}
+
 /**
  * Get system information for AI context
  */
@@ -53,22 +69,18 @@ function getSystemInfo(): { platform: string; shell: string} {
  */
 export function setupActivityLogging(
 	context: vscode.ExtensionContext, 
-	activityLogPath: string | undefined
 ): { cleanupTimer?: NodeJS.Timeout } {
 	let cleanupTimer: NodeJS.Timeout | undefined;
 	
-	// Schedule periodic log cleanup if we have a log path
-	if (activityLogPath) {
-		cleanupTimer = scheduleLogCleanup(activityLogPath);
-		context.subscriptions.push({
-			dispose: () => clearInterval(cleanupTimer!)
-		});
-		
-		// Perform initial cleanup on startup (but don't await to avoid blocking)
-		cleanupActivityLog(activityLogPath).catch(error => {
-			console.error('DevBoost: Initial log cleanup failed:', error);
-		});
-	}
+	cleanupTimer = scheduleLogCleanup();
+	context.subscriptions.push({
+		dispose: () => clearInterval(cleanupTimer!)
+	});
+	
+	// Perform initial cleanup on startup (but don't await to avoid blocking)
+	cleanupActivityLog().catch(error => {
+		console.error('DevBoost: Initial log cleanup failed:', error);
+	});
 	
 	// Clean up terminal directory tracking when terminals are closed
 	context.subscriptions.push(
@@ -92,7 +104,7 @@ export function setupActivityLogging(
 				const logContext: LogContext = {
 					currentDirectory: path.dirname(file.fsPath)
 				};
-				await logActivity('Create', file.fsPath, activityLogPath, logContext);
+				await logActivity('Create', file.fsPath, getCurrentActivityLogPath(), logContext);
 			}
 		})
 	);
@@ -104,7 +116,7 @@ export function setupActivityLogging(
 				const logContext: LogContext = {
 					currentDirectory: path.dirname(file.fsPath)
 				};
-				await logActivity('Delete', file.fsPath, activityLogPath, logContext);
+				await logActivity('Delete', file.fsPath, getCurrentActivityLogPath(), logContext);
 			}
 		})
 	);
@@ -116,101 +128,153 @@ export function setupActivityLogging(
 				const logContext: LogContext = {
 					currentDirectory: path.dirname(rename.newUri.fsPath)
 				};
-				await logActivity('Rename', `${rename.oldUri.fsPath} to ${rename.newUri.fsPath}`, activityLogPath, logContext);
+				await logActivity('Rename', `${rename.oldUri.fsPath} to ${rename.newUri.fsPath}`, getCurrentActivityLogPath(), logContext);
 			}
 		})
 	);
 
-	// Log when terminal commands are executed
+	// Log when terminal commands START
+	// Strategy: Add to pending map with 5s timeout. If command completes within 5s,
+	// it will be removed from map and logged in onDidEnd. Otherwise, timeout logs it without exit code.
 	context.subscriptions.push(
-		vscode.window.onDidEndTerminalShellExecution(async (event) => {
-			const commandLine = event.execution.commandLine.value;
-			const command = commandLine.trim();
-			const exitCode = event.exitCode;
-			
-			// Try to get CWD from shell integration if available
-			const executionCwd = event.execution.cwd;
-			
-			// Get current workspace path for tracking
-			const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-			
-		// Gather enhanced context information
+		vscode.window.onDidStartTerminalShellExecution(async (event) => {
+		const commandLine = event.execution.commandLine.value;
+		const command = commandLine.trim();
+		
+		// Skip DevBoost's own enable/disable tracking scripts
+		if (command.includes('DEVBOOST_TRACKING_ENABLED') || 
+		    command.includes('devboost_log_command') ||
+		    command.includes('DevBoost_LogCommand') ||
+		    command.includes('DevBoost tracking')) {
+			console.log('DevBoost: Skipping enable/disable tracking script from activity log');
+			return;
+		}
+		
+		// Get CWD and workspace info
+		const executionCwd = event.execution.cwd;
+		const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		const terminal = event.terminal;
 		
-		// Get terminal process ID (it's a Promise, so we need to await it)
+		// Get terminal process ID
 		let terminalId: string | undefined;
 		try {
 			const pid = await terminal.processId;
 			terminalId = pid?.toString();
 		} catch (error) {
-			// If we can't get the process ID, just skip it
 			terminalId = undefined;
 		}
 		
-		// Initialize terminal directory tracking if this is a new terminal
+		// Initialize terminal directory tracking
 		if (terminalId && !terminalDirectories.has(terminalId)) {
-			// If shell integration provides CWD, use it (most reliable!)
 			if (executionCwd) {
 				terminalDirectories.set(terminalId, executionCwd.fsPath);
 			} else {
-				// Fallback to workspace path
 				terminalDirectories.set(terminalId, workspacePath || process.cwd());
 			}
 		}
 		
-		// Get current tracked directory for this terminal
-		// Prefer shell integration CWD if available, otherwise use tracked directory
+		// Get current directory
 		let currentDirectory = executionCwd?.fsPath || (terminalId ? terminalDirectories.get(terminalId) : workspacePath);
 		
-		// Update tracked directory with actual CWD from shell integration
 		if (executionCwd && terminalId) {
 			terminalDirectories.set(terminalId, executionCwd.fsPath);
 			currentDirectory = executionCwd.fsPath;
 		}
 		
-		// Build enhanced context
+		// Build context (no exit code yet)
 		const logContext: LogContext = {
 			terminalId: terminalId,
 			terminalName: terminal.name,
 			shellType: getSystemInfo().shell,
-			currentDirectory: currentDirectory,
-			exitCode: exitCode
+			currentDirectory: currentDirectory
 		};
 		
-		// Track directory changes from 'cd' commands (only needed if shell integration unavailable)
+		// Track directory changes from 'cd' commands
 		if (!executionCwd) {
 			try {
-				// Match 'cd' only at the start of the command (not in chains or strings)
 				const cdMatch = event.execution.commandLine.value.match(/^\s*cd\s+([^\s;&|]+)/);
 				if (cdMatch && cdMatch[1] && terminalId) {
 					const targetPath = cdMatch[1];
-					
-					// Check if it's an absolute path (Unix: starts with /, Windows: starts with C:\ etc.)
 					const isAbsolutePath = targetPath.startsWith('/') || /^[A-Z]:\\/i.test(targetPath);
 					
 					if (isAbsolutePath) {
-						// Absolute path - use directly (most reliable)
 						terminalDirectories.set(terminalId, targetPath);
 						logContext.currentDirectory = targetPath;
 					} else {
-						// Relative path - resolve from current directory
 						const newDir = path.resolve(currentDirectory || workspacePath || '', targetPath);
 						terminalDirectories.set(terminalId, newDir);
 						logContext.currentDirectory = newDir;
 					}
 				}
 			} catch (error) {
-				// Ignore errors in CWD detection
+				// Ignore errors
 			}
 		}
-			
-			// Skip commands with exit code 127 (command not found) and 126 (command not executable)
-			if (exitCode === 127 || exitCode === 126) {
-				console.log(`DevBoost: Skipping invalid command (exit code ${exitCode}): ${command}`);
-			} else {
-				// Log other non-zero exit codes but still save them as they might be valid commands that failed for other reasons
-				await logActivity('Command', command, activityLogPath, logContext);
+		
+		// Set 5-second timeout - if command still pending after 5s, log without exit code
+		const timeout = setTimeout(async () => {
+			// Command is still running after 5s, log it now with no exit code
+			if (pendingExecutions.has(event.execution)) {
+				await logActivity('Command', command, getCurrentActivityLogPath(), logContext);
+				pendingExecutions.delete(event.execution);
 			}
+		}, 5000);
+		
+		// Add to pending executions
+		pendingExecutions.set(event.execution, timeout);
+	})
+	);
+
+	// Listen for command completion
+	context.subscriptions.push(
+		vscode.window.onDidEndTerminalShellExecution(async (event) => {
+			const timeout = pendingExecutions.get(event.execution);
+			
+			if (!timeout) {
+				// Command took >5s, already logged by timeout
+				return;
+			}
+			
+			clearTimeout(timeout);
+			pendingExecutions.delete(event.execution);
+			
+			const commandLine = event.execution.commandLine.value;
+			const command = commandLine.trim();
+			const exitCode = event.exitCode;
+			
+			// Skip DevBoost's own scripts
+			if (command.includes('DEVBOOST_TRACKING_ENABLED') || 
+			    command.includes('devboost_log_command') ||
+			    command.includes('DevBoost_LogCommand') ||
+			    command.includes('DevBoost tracking')) {
+				return;
+			}
+			
+			// Get context info
+			const executionCwd = event.execution.cwd;
+			const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+			const terminal = event.terminal;
+			
+			let terminalId: string | undefined;
+			try {
+				const pid = await terminal.processId;
+				terminalId = pid?.toString();
+			} catch (error) {
+				terminalId = undefined;
+			}
+			
+			const currentDirectory = executionCwd?.fsPath || (terminalId ? terminalDirectories.get(terminalId) : workspacePath);
+			
+			const logContext: LogContext = {
+				terminalId: terminalId,
+				terminalName: terminal.name,
+				shellType: getSystemInfo().shell,
+				currentDirectory: currentDirectory,
+				exitCode: exitCode
+			};
+			
+			// Log command with exit code
+			await logActivity('Command', command, getCurrentActivityLogPath(), logContext);
 		})
 	);
 
@@ -228,7 +292,7 @@ export function setupActivityLogging(
 			};
 			
 			const taskDetail = `${task.name} [${task.source}]`;
-			await logActivity('TaskStart', taskDetail, activityLogPath, logContext);
+			await logActivity('TaskStart', taskDetail, getCurrentActivityLogPath(), logContext);
 		})
 	);
 	
@@ -248,7 +312,7 @@ export function setupActivityLogging(
 			const taskDetail = duration 
 				? `${task.name} [${task.source}] (${Math.round(duration/1000)}s)`
 				: `${task.name} [${task.source}]`;
-			await logActivity('TaskEnd', taskDetail, activityLogPath, logContext);
+			await logActivity('TaskEnd', taskDetail, getCurrentActivityLogPath(), logContext);
 		})
 	);
 
@@ -260,7 +324,7 @@ export function setupActivityLogging(
 			};
 			
 			const debugDetail = `${session.name} (${session.type})`;
-			await logActivity('DebugStart', debugDetail, activityLogPath, logContext);
+			await logActivity('DebugStart', debugDetail, getCurrentActivityLogPath(), logContext);
 		})
 	);
 	
@@ -271,7 +335,7 @@ export function setupActivityLogging(
 			};
 			
 			const debugDetail = `${session.name} (${session.type})`;
-			await logActivity('DebugEnd', debugDetail, activityLogPath, logContext);
+			await logActivity('DebugEnd', debugDetail, getCurrentActivityLogPath(), logContext);
 		})
 	);
 	
@@ -398,7 +462,8 @@ export function getTopActivities(activities: Map<string, number>, count: number)
 /**
  * Clean up activity log to optimize for AI context and prevent bloat
  */
-export async function cleanupActivityLog(activityLogPath: string): Promise<void> {
+export async function cleanupActivityLog(): Promise<void> {
+	const activityLogPath = getCurrentActivityLogPath();
 	if (!activityLogPath) {
 		console.log('DevBoost: No activity log path provided for cleanup');
 		return;
@@ -557,8 +622,8 @@ ${topActivities.map((activity, i) => `${i + 1}. ${activity} (${activities.get(ac
 /**
  * Schedule periodic log cleanup
  */
-export function scheduleLogCleanup(activityLogPath: string): NodeJS.Timeout {
+export function scheduleLogCleanup(): NodeJS.Timeout {
 	return setInterval(async () => {
-		await cleanupActivityLog(activityLogPath);
+		await cleanupActivityLog();
 	}, LOG_CONFIG.CLEANUP_INTERVAL);
 }
