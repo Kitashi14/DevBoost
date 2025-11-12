@@ -398,8 +398,8 @@ export class EditButtonFormPanel {
 
 			<div class="form-group">
 				<label for="cmd">Command${button.scriptFile ? ' to execute script file': ''}<span class="required">*</span></label>
-				<textarea id="cmd" placeholder="${button.scriptFile ? `e.g., bash &quot;/path/to/script.sh&quot; '{input_1}' '{input_2}', python &quot;/path/to/script.py&quot;`:`e.g. npm run, git status && ls -l`}">${escapeHtml(button.cmd)}</textarea>
-				<div class="hint">${button.scriptFile ? `Full command to execute the script, including provided script path. Use '{variableName}' for dynamic inputs.` : `Command to be executed in terminal. Use '{variableName}' for dynamic inputs (eg. git commit -m '{message}')`}</div>
+				<textarea id="cmd" placeholder="${button.scriptFile ? `e.g., bash &quot;/path/to/script.sh&quot; '{input_1}' '{input_2}', python3 &quot;/path/to/script.py&quot;`:`e.g. npm run, git status && ls -l`}">${escapeHtml(button.cmd)}</textarea>
+				<div class="hint">${button.scriptFile ? `Full command to execute the script, including provided full script path. Use '{variableName}' for dynamic inputs.` : `Command to be executed in terminal. Use '{variableName}' for dynamic inputs (eg. git commit -m '{message}')`}</div>
 				<div class="error-message" id="cmdError"></div>
 				
 				

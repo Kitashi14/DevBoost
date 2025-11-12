@@ -636,20 +636,19 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 	// This applies to both script and command buttons
 	if (button.execDir && button.execDir.trim().length > 0 && button.execDir.trim() !== '.') {
 		let execDir = button.execDir.trim();
-		
-		// Replace <workspace> keyword with actual workspace path
-		if (execDir.includes('<workspace>')) {
-			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-			if (workspaceFolder) {
-				const workspacePath = workspaceFolder.uri.fsPath;
-				execDir = execDir.replace(/<workspace>/g, workspacePath);
-			} else {
-				vscode.window.showWarningMessage('No workspace folder open. Cannot resolve <workspace> path.');
-				return;
-			}
-		}
-		
 		finalCommand = `cd ${execDir} && ${finalCommand}`;
+	}
+
+	// Replace <workspace> keyword with actual workspace path
+	if (finalCommand.includes('<workspace>')) {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (workspaceFolder) {
+			const workspacePath = workspaceFolder.uri.fsPath;
+			finalCommand = finalCommand.replace(/<workspace>/g, workspacePath);
+		} else {
+			vscode.window.showWarningMessage('No workspace folder open. Cannot resolve <workspace> path.');
+			return;
+		}
 	}
 	// Check if it's a single-word (eg. VS Code command, no spaces or chaining)
 	if (!finalCommand.includes(' ') && !finalCommand.includes('&&') && !finalCommand.includes('||') && !finalCommand.includes(';')) {
@@ -754,8 +753,7 @@ export async function addToGlobal(item: SmartCmdButtonTreeItem, buttonsProvider:
 	// Use AI to validate if button is suitable for global scope, skip if it uses a script file
 	const safetyCheck = item.button.scriptFile? { isSafe: true } : await vscode.window.withProgress({
 		location: vscode.ProgressLocation.Notification,
-		title: "Analyzing button compatibility with global scope...",
-		cancellable: true
+		title: "Analyzing button compatibility with global scope..."
 	}, async (progress, token) => {
 		return await aiServices.checkIfButtonIsGlobalSafe(item.button, buttonsProvider.globalStoragePath);
 	});

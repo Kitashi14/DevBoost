@@ -678,7 +678,7 @@ WRONG FORMAT (DO NOT DO THIS):
 	{
 		"name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
-        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script		❌ scriptFile missing
+        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script		❌ scriptFile missing
         "description": "Builds project and deploys to specified environment with error checking",		
         "inputs": [
             {
@@ -965,7 +965,7 @@ WRONG FORMAT - SCRIPT
 {
 	"name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
-	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script			❌ scriptFile missing
+	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script			❌ scriptFile missing
 	"description": "Builds project and deploys to specified environment with error checking",		
 	"inputs": [
 		{
