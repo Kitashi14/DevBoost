@@ -4,3 +4,4 @@ out/
 .vscode*/*
 *.vsix
 *.diff
+README.md
