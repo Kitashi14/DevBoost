@@ -500,7 +500,7 @@ export class ButtonFormPanel {
 					<label for="cmd">Command<span class="required">*</span></label>
 					<textarea id="cmd" placeholder="cmd to be executed in terminal (e.g. npm run, git status && ls -l)"></textarea>
 					<div class="error-message" id="cmdError"></div>
-					<div class="hint">Use {variableName} for dynamic inputs (e.g., git commit -m '{message}')</div>
+					<div class="hint">Use '{variableName}' for dynamic inputs (e.g., git commit -m '{message}')</div>
 				</div>
 			</div>
 
@@ -537,9 +537,9 @@ export class ButtonFormPanel {
 				
 				<div class="form-group">
 					<label for="scriptCmd">Command to Execute Script<span class="required">*</span></label>
-					<textarea id="scriptCmd" placeholder="e.g., bash &quot;/path/to/script.sh&quot; {input_1} {input_2}, python &quot;/path/to/script.py&quot;"></textarea>
+					<textarea id="scriptCmd" placeholder="e.g., bash &quot;/path/to/script.sh&quot; '{input_1}' '{input_2}', python &quot;/path/to/script.py&quot;"></textarea>
 					<div class="error-message" id="scriptCmdError"></div>
-					<div class="hint">Full command to execute the script, including provided script path. Use {variableName} for dynamic inputs.</div>
+					<div class="hint">Full command to execute the script, including provided script path. Use '{variableName}' for dynamic inputs.</div>
 				</div>
 			</div>
 

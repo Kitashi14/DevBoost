@@ -65,13 +65,13 @@ export function ensureUniqueFileName(fileName: string, existingFiles: string[] =
 	}
 	
 	// Extract name and extension
-	const lastDotIndex = fileName.lastIndexOf('.');
+	const firstDotIndex = fileName.indexOf('.');
 	let baseName: string;
 	let extension: string;
 	
-	if (lastDotIndex > 0) {
-		baseName = fileName.substring(0, lastDotIndex);
-		extension = fileName.substring(lastDotIndex); // includes the dot
+	if (firstDotIndex > 0) {
+		baseName = fileName.substring(0, firstDotIndex);
+		extension = fileName.substring(firstDotIndex); // includes the dot
 	} else {
 		baseName = fileName;
 		extension = '';
@@ -215,22 +215,30 @@ export function generateScriptCommand(
 	}
 	
 	const scriptPath = path.join(scriptsDir, scriptFileName);
-	const isWindows = process.platform === 'win32';
+	const ext = path.extname(scriptFileName).toLowerCase();
 	
 	// Build base command
 	let command: string;
-	if (isWindows) {
-		// Windows: Just call the batch file
+	if (ext === '.bat' || ext === '.cmd') {
 		command = `"${scriptPath}"`;
+	} else if ( ext === '.sh') {
+		command = `"${scriptPath}"`;
+	} else if ( ext === '.py') {
+		command = `python3 "${scriptPath}"`;
+	} else if ( ext === '.js') {
+		command = `node "${scriptPath}"`;
+	} else if ( ext === '.rb') {
+		command = `ruby "${scriptPath}"`;
+	} else if ( ext === '.pl') {
+		command = `perl "${scriptPath}"`;
 	} else {
-		// Unix: Execute the script directly (shebang will handle interpreter selection)
-		// Since script has #!/usr/bin/env bash, just make it executable and run it
+		// Default: execute directly (shebang should handle interpreter)
 		command = `"${scriptPath}"`;
 	}
 	
 	// Append input variable placeholders if present
 	if (inputs && inputs.length > 0) {
-		const placeholders = inputs.map(input => input.variable).join(' ');
+		const placeholders = inputs.map(input => `'${input.variable}'`).join(' ');
 		command = `${command} ${placeholders}`;
 	}
 	
@@ -243,10 +251,13 @@ export function generateScriptCommand(
  */
 export function createScriptContent(
 	commands: string,
+	scriptFileName: string,
 	description?: string,
-	inputs?: InputField[]
+	inputs?: InputField[],
 ): string {
-	const isWindows = process.platform === 'win32';
+
+	const ext = path.extname(scriptFileName).toLowerCase();
+	const isWindows = ext === '.bat' || ext === '.cmd';
 	
 	// Replace input variable placeholders with positional argument references
 	let processedCommands = commands;
@@ -269,13 +280,47 @@ export function createScriptContent(
 			processedCommands = processedCommands.replace(regex, argReference);
 		});
 	}
+	let content = '';
 	
-	if (isWindows) {
-		// Windows batch file
-		let content = '@echo off\n';
+	// Add shebang based on file extension
+	if (ext === '.sh') {
+		content = '#!/bin/bash\n';
 		if (description) {
 			content += `REM Description: ${description}\n`;
 		}
+	} else if (ext === '.py') {
+		content = '#!/usr/bin/env python3\n';
+		if (description) {
+			content += `# Description: ${description}\n`;
+		}
+	} else if (ext === '.js') {
+		content = '#!/usr/bin/env node\n';
+		if (description) {
+			content += `// Description: ${description}\n`;
+		}
+	} else if (ext === '.rb') {
+		content = '#!/usr/bin/env ruby\n';
+		if (description) {
+			content += `# Description: ${description}\n`;
+		}
+	} else if (ext === '.pl') {
+		content = '#!/usr/bin/env perl\n';
+		if (description) {
+			content += `# Description: ${description}\n`;
+		}
+	} else if (ext === '.bat' || ext === '.cmd') {
+		content = '@echo off\n';
+		if (description) {
+			content += `REM Description: ${description}\n`;
+		}
+	} else {
+		// Generic script without shebang
+		if(description)
+			content = '# Description: ' + description + '\n\n';
+	}
+	
+
+	if (ext === '.bat' || ext === '.cmd') {
 		
 		// Add input arguments documentation
 		if (inputs && inputs.length > 0) {
@@ -293,11 +338,6 @@ export function createScriptContent(
 		content += processedCommands + '\n';
 		return content;
 	} else {
-		// Unix shell script
-		let content = '#!/usr/bin/env bash\n';
-		if (description) {
-			content += `# Description: ${description}\n`;
-		}
 		
 		// Add input arguments documentation
 		if (inputs && inputs.length > 0) {
@@ -312,7 +352,8 @@ export function createScriptContent(
 		}
 		
 		content += '\n';
-		content += 'set -e  # Exit on error\n\n';
+		if(ext === '.sh')
+			content += 'set -e  # Exit on error\n\n';
 		
 		content += processedCommands + '\n';
 		return content;
@@ -358,7 +399,8 @@ export async function processButtonWithScript(
             // Pass inputs for argument documentation
             scriptContent = createScriptContent(
                 button.scriptContent,
-                button.description,
+				scriptFileName,
+				button.description,
                 button.inputs
             );
         }

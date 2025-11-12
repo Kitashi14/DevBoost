@@ -582,6 +582,11 @@ What would you like to do?`;
 		}
 
 		// Update button
+		const buttonExisting = this.buttons.find(b => b.id === editedButton.id);
+		if (!buttonExisting) {
+			vscode.window.showWarningMessage(`DevBoost: Button "${editedButton.name}" not found for update.`);
+			return;
+		}
 		this.buttons[index] = editedButton;
 
 		// Save to storage

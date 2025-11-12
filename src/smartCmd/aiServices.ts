@@ -505,11 +505,12 @@ ${optimizedLog.recentLogs.join('\n')}
 4. **DIRECTORY-AWARE**: Notice which directories commands are executed in (from Context.terminal.cwd)
 5. **FAILURE-PROOF DESIGN**: Address commands that failed (non-zero exit codes)
 6. **CHAIN INTELLIGENCE**: Create buttons that automate entire workflows, not just single commands
-7. **SCRIPT VS COMMAND CHAIN**: For complex workflows, generate scripts instead of command chains
+7. **CHAIN COMMANDS INPUT**: If commands require user input, use '{variableName}' placeholders, quotes surrounding them in the command field to take input with space support
+8. **SCRIPT VS COMMAND CHAIN**: For complex workflows, generate scripts instead of command chains
 
 🔄 WHEN TO USE SCRIPTS VS COMMAND CHAINS:
 
-USE SCRIPT (scriptContent field) when workflow requires:
+USE SCRIPT (scriptContent and scriptFile field) when workflow requires:
 • Multiple directory changes between commands
 • Complex error handling and conditional logic
 • Loops, variables, or advanced shell features
@@ -540,8 +541,8 @@ SIMPLE COMMAND CHAIN:
   	cmd: "[command]"
   Use <workspace> keyword to make it portable across different machines
 
-• If command needs user input, use {variableName} placeholders:
-  Command: "docker exec -it {container} bash"
+• If command needs user input, use '{variableName}' placeholders:
+  Command: "docker exec -it '{container}' bash"
   With inputs: [{"placeholder": "Container name", "variable": "{container}"}]
 
 COMPLEX SCRIPT:
@@ -564,7 +565,7 @@ Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
-4. If the command needs user input, include input fields with placeholders (use {variableName} format)
+4. If the command needs user input, include input fields with placeholders (use '{variableName}' format)
 5. execDir: where to run from (applies to both cmd and scriptContent)
 
 Existing Buttons to Check (for duplication avoidance):
@@ -594,6 +595,7 @@ SCRIPT FORMAT (for complex workflows):
         "name": "🚀 Multi-Service Setup",
         "execDir": "<workspace>",
         "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
+		"scriptFile": "setup_services.sh",
         "description": "Sets up frontend, backend, and starts Docker services"
     }
 ]
@@ -615,7 +617,7 @@ WITH INPUT FIELDS - COMMAND FORMAT:
     {
         "name": "🐳 Docker Execute",
         "execDir": "<workspace>/path/to/context",
-        "cmd": "docker exec -it {container} {command}",
+        "cmd": "docker exec -it '{container}' '{command}'",
         "description": "Execute command inside a Docker container",
         "inputs": [
             {
@@ -636,11 +638,29 @@ WITH INPUT FIELDS - SCRIPT FORMAT:
         "name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
         "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi",
+		"scriptFile": "deploy_to_env.sh",
         "description": "Builds project and deploys to specified environment with error checking",
         "inputs": [
             {
                 "placeholder": "Environment (dev/staging/prod)",
                 "variable": "{env}"
+            }
+        ]
+    },
+    {
+        "name": "🐍 Process Data with Python",
+        "execDir": "<workspace>",
+        "scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No filename provided')\\n    sys.exit(1)\\n\\nfilename = sys.argv[1]\\noutput_file = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {filename}')\\nprint(f'Output will be saved to: {output_file}')\\n\\nif not os.path.exists(filename):\\n    print(f'Error: File {filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_file, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_file}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
+        "scriptFile": "process_data.py",
+        "description": "Python script that reads a file and generates statistics with custom input and output filenames",
+        "inputs": [
+            {
+                "placeholder": "Input filename (e.g., data.txt)",
+                "variable": "{input_file}"
+            },
+            {
+                "placeholder": "Output filename (e.g., results.txt)",
+                "variable": "{output_file}"
             }
         ]
     }
@@ -658,7 +678,7 @@ WRONG FORMAT (DO NOT DO THIS):
 	{
 		"name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
-        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script
+        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script		❌ scriptFile missing
         "description": "Builds project and deploys to specified environment with error checking",		
         "inputs": [
             {
@@ -706,6 +726,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 				}
 				else {
 					b.scriptContent = undefined;
+					b.scriptFile = undefined;
 				}
 				b.modelUsed = model.family;
 			});
@@ -830,7 +851,7 @@ ${platform === 'macOS' || platform === 'Linux' ? '- Use Unix/Linux-compatible co
 
 🔄 WHEN TO USE SCRIPTS VS COMMAND CHAINS:
 
-USE SCRIPT (scriptContent field) when the task requires:
+USE SCRIPT (scriptContent and scriptFile field) when the task requires:
 • When asked to generate or create script
 • When asked to generate or create script **file** then don't create a script to generate a seperate script file rather create the actual script directly in scriptContent
 • Multiple directory changes between commands
@@ -857,7 +878,7 @@ Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
-4. If the command needs user input, include input fields with placeholders (use {variableName} format)
+4. If the command needs user input, include input fields with placeholders (use '{variableName}' format, put quotes around variable in cmd/scriptContent to support spaces)
 
 Existing Buttons to Check (for duplication avoidance):
 ${existingButtonsInfo}
@@ -900,6 +921,7 @@ COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
     "name": "🔧 Multi-Service Setup",
 	"execDir": "<workspace>",
     "scriptContent": "cd frontend && npm install && npm run build\\ncd ../backend && npm install\\ncd .. && docker-compose up -d\\necho Setup complete",
+	"scriptFile": "setup_services.sh",
     "description": "Sets up frontend, backend, and starts Docker services"
 }
 
@@ -908,8 +930,27 @@ WITH INPUT FIELDS - SCRIPT:
     "name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
     "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
+	"scriptFile": "deploy_to_env.sh",
     "description": "Builds and deploys to specified environment with error checking",
     "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
+}
+
+{
+	"name": "🐍 Process Data with Python",
+	"execDir": "<workspace>",
+	"scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No filename provided')\\n    sys.exit(1)\\n\\nfilename = sys.argv[1]\\noutput_file = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {filename}')\\nprint(f'Output will be saved to: {output_file}')\\n\\nif not os.path.exists(filename):\\n    print(f'Error: File {filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_file, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_file}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
+	"scriptFile": "process_data.py",
+	"description": "Python script that reads a file and generates statistics with custom input and output filenames",
+	"inputs": [
+		{
+			"placeholder": "Input filename (e.g., data.txt)",
+			"variable": "{input_file}"
+		},
+		{
+			"placeholder": "Output filename (e.g., results.txt)",
+			"variable": "{output_file}"
+		}
+	]
 }
 
 WRONG FORMAT - COMMAND (DO NOT DO THIS):
@@ -924,7 +965,7 @@ WRONG FORMAT - SCRIPT
 {
 	"name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
-	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script
+	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir field, get the workspace from pwd or other way to use in script			❌ scriptFile missing
 	"description": "Builds project and deploys to specified environment with error checking",		
 	"inputs": [
 		{
@@ -977,6 +1018,7 @@ Only respond with the JSON object, no additional text.`;
 					}
 					else {
 						button.scriptContent = undefined;
+						button.scriptFile = undefined;
 					}
 					button.modelUsed = model.family;
 					console.log('Successfully parsed button:', button);

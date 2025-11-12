@@ -227,7 +227,6 @@ export async function getAIModel(module: 'smartCmd' | 'promptEnhancer', globalSt
 		vscode.window.showWarningMessage('No GitHub Copilot models available. Please ensure you have GitHub Copilot enabled.');
 		return null;
 	}
-	console.log("config:", config);
 	// Check if we have a saved model preference for this module
 	const moduleConfig = config?.aiModel?.[module];
 	if (moduleConfig?.family) {

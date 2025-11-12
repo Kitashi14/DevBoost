@@ -744,7 +744,7 @@ export class AIButtonDescriptionPanel {
 			<h3>ℹ️ How It Works</h3>
 			<p>Describe what you want your button to do in plain English. The AI will generate:</p>
 			<p>• A descriptive name with an emoji</p>
-			<p>• The appropriate command or shell/batch script</p>
+			<p>• The appropriate command or script</p>
 			<p>• Execution directory (where the command runs)</p>
 			<p>• Input fields if user interaction is needed</p>
 		</div>
@@ -823,7 +823,7 @@ export class AIButtonDescriptionPanel {
 					<li><strong>Mention inputs:</strong> If you need user input, describe it (e.g., "with a custom message", "ask for environment name")</li>
 					<li><strong>Describe workflow:</strong> For complex tasks, explain the sequence (e.g., "first build, then deploy")</li>
 					<li><strong>Specify scope:</strong> For workspace buttons, mention project-specific paths or files</li>
-					<li><strong>For shell/batch scripts:</strong> Use phrases like "create a script" for multi-step complex workflows</li>
+					<li><strong>For scripts:</strong> Use phrases like "create a shell script" for multi-step complex workflows</li>
 				</ul>
 			</div>
 
@@ -846,7 +846,7 @@ export class AIButtonDescriptionPanel {
   <span class="json-punctuation">},</span>
   <span class="json-punctuation">{</span>
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"Create File"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"touch {file}"</span><span class="json-punctuation">,</span>
+    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"touch '{file}'"</span><span class="json-punctuation">,</span>
     <span class="json-key">"execDir"</span><span class="json-punctuation">:</span> <span class="json-string">"."</span><span class="json-punctuation">,</span>
     <span class="json-key">"inputs"</span><span class="json-punctuation">:</span> <span class="json-punctuation">[</span>
       <span class="json-punctuation">{</span>
@@ -868,7 +868,7 @@ export class AIButtonDescriptionPanel {
     <span class="json-key">"name"</span><span class="json-punctuation">:</span> <span class="json-string">"<span class="json-emoji">🚀</span> Deploy with Params"</span><span class="json-punctuation">,</span>
     <span class="json-key">"execDir"</span><span class="json-punctuation">:</span> <span class="json-string">"."</span><span class="json-punctuation">,</span>
     <span class="json-key">"scriptFile"</span><span class="json-punctuation">:</span> <span class="json-string">"_deploy.sh"</span><span class="json-punctuation">,</span>
-    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\\"/path/to/scripts/_deploy.sh\\" {environment} {version}"</span><span class="json-punctuation">,</span>
+    <span class="json-key">"cmd"</span><span class="json-punctuation">:</span> <span class="json-string">"\\"/path/to/scripts/_deploy.sh\\" '{environment}' '{version}'"</span><span class="json-punctuation">,</span>
     <span class="json-key">"inputs"</span><span class="json-punctuation">:</span> <span class="json-punctuation">[</span>
       <span class="json-punctuation">{</span>
         <span class="json-key">"placeholder"</span><span class="json-punctuation">:</span> <span class="json-string">"Environment (dev/staging/prod)"</span><span class="json-punctuation">,</span>
