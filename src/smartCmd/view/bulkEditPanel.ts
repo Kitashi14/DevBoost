@@ -11,6 +11,7 @@ export class BulkEditPanel {
 	private buttons: smartCmdButton[];
 	private treeDataChangeListener: vscode.Disposable | undefined;
 	private globalStoragePath: string;
+	private originalOrder: string[] = []; // Store original button IDs order
 
 	private constructor(
 		panel: vscode.WebviewPanel,
@@ -21,8 +22,17 @@ export class BulkEditPanel {
 		onDidChangeTreeData?: vscode.Event<any>
 	) {
 		this.panel = panel;
-		this.buttons = buttons;
 		this.globalStoragePath = globalStoragePath;
+		
+		// Sort buttons initially: global first, then workspace
+		this.buttons = [...buttons].sort((a, b) => {
+			if (a.scope === 'global' && b.scope === 'workspace') return -1;
+			if (a.scope === 'workspace' && b.scope === 'global') return 1;
+			return 0;
+		});
+		
+		// Store original order (after initial sorting)
+		this.originalOrder = this.buttons.map(b => b.id!);
 
 		// Set up webview content
 		this.panel.webview.html = this.getHtmlContent();
@@ -44,6 +54,12 @@ export class BulkEditPanel {
 						break;
 					case 'cancel':
 						this.dispose();
+						break;
+					case 'reorder':
+						// Update button order based on new IDs order
+						if (message.newOrder && Array.isArray(message.newOrder)) {
+							this.reorderButtons(message.newOrder);
+						}
 						break;
 					case 'openScript':
 						// Open the script file
@@ -84,26 +100,92 @@ export class BulkEditPanel {
 	}
 
 	private refreshButtonData(): void {
-		// Get fresh button data
+		// Get fresh button data from tree provider
 		const updatedButtons = this.getUpdatedButtons();
-		this.buttons = updatedButtons;
+		
+		// Preserve current order while handling additions/deletions
+		const updatedButtonIds = new Set(updatedButtons.map(b => b.id!));
+		const currentButtonIds = this.buttons.map(b => b.id!);
+		
+		// Keep existing buttons in current order (if they still exist)
+		const reorderedButtons: smartCmdButton[] = [];
+		currentButtonIds.forEach(id => {
+			if (updatedButtonIds.has(id)) {
+				const button = updatedButtons.find(b => b.id === id);
+				if (button) {
+					reorderedButtons.push(button);
+				}
+			}
+		});
+		
+		// Add any new buttons at the appropriate position (buttons that exist in updated but not in current)
+		const newButtons = updatedButtons.filter(button => !currentButtonIds.includes(button.id!));
+		
+		// Separate new buttons by scope
+		const newGlobalButtons = newButtons.filter(b => b.scope === 'global');
+		const newWorkspaceButtons = newButtons.filter(b => b.scope === 'workspace');
+		
+		// Find the index where global buttons end (insert new global buttons there)
+		const lastGlobalIndex = reorderedButtons.findIndex(b => b.scope === 'workspace');
+		const globalInsertIndex = lastGlobalIndex === -1 ? reorderedButtons.length : lastGlobalIndex;
+		
+		// Insert new global buttons at the end of global section
+		reorderedButtons.splice(globalInsertIndex, 0, ...newGlobalButtons);
+		
+		// Add new workspace buttons at the end
+		reorderedButtons.push(...newWorkspaceButtons);
+		
+		this.buttons = reorderedButtons;
+		
+		// Update originalOrder to remove deleted buttons
+		this.originalOrder = this.originalOrder.filter(id => updatedButtonIds.has(id));
+		
+		// Add new global buttons at the end of global section in originalOrder
+		const lastGlobalInOriginal = this.originalOrder.findIndex(id => {
+			const button = this.buttons.find(b => b.id === id);
+			return button?.scope === 'workspace';
+		});
+		const globalInsertInOriginal = lastGlobalInOriginal === -1 ? this.originalOrder.length : lastGlobalInOriginal;
+		
+		this.originalOrder.splice(globalInsertInOriginal, 0, ...newGlobalButtons.map(b => b.id!));
+		
+		// Add new workspace buttons at the end of originalOrder
+		this.originalOrder.push(...newWorkspaceButtons.map(b => b.id!));
 		
 		// Update the webview with new data
 		this.panel.webview.postMessage({
 			command: 'refreshButtons',
-			buttons: this.getButtonsForWebview()
+			buttons: this.getButtonsForWebview(),
+			originalOrder: this.originalOrder
 		});
 	}
 
-	private getButtonsForWebview() {
-		// Sort buttons: global first, then workspace
-		const sortedButtons = [...this.buttons].sort((a, b) => {
-			if (a.scope === 'global' && b.scope === 'workspace') return -1;
-			if (a.scope === 'workspace' && b.scope === 'global') return 1;
-			return 0;
+	private reorderButtons(newOrder: string[]): void {
+		// Reorder buttons array based on new ID order
+		const buttonMap = new Map(this.buttons.map(b => [b.id!, b]));
+		const reorderedButtons: smartCmdButton[] = [];
+		
+		newOrder.forEach(id => {
+			const button = buttonMap.get(id);
+			if (button) {
+				reorderedButtons.push(button);
+			}
 		});
+		
+		// Add any buttons that weren't in newOrder (shouldn't happen, but safety check)
+		this.buttons.forEach(button => {
+			if (!newOrder.includes(button.id!)) {
+				reorderedButtons.push(button);
+			}
+		});
+		
+		this.buttons = reorderedButtons;
+	}
 
-		return sortedButtons.map(b => ({
+	private getButtonsForWebview() {
+		// Don't sort - preserve the current order
+		// (Initial order will be sorted by constructor, but user reordering should be preserved)
+		return this.buttons.map(b => ({
 			id: b.id!, // Use button's UUID
 			name: b.name,
 			cmd: b.cmd,
@@ -155,6 +237,7 @@ export class BulkEditPanel {
 		}
 
 		try {
+			this.originalOrder = this.buttons.map(b => b.id!);
 			await this.onComplete(operations);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to complete operations: ${error}`);
@@ -393,6 +476,42 @@ export class BulkEditPanel {
 			margin-top: 4px;
 		}
 		
+		.order-modified-banner {
+			background-color: var(--vscode-inputValidation-warningBackground);
+			border: 1px solid var(--vscode-inputValidation-warningBorder);
+			color: var(--vscode-inputValidation-warningForeground);
+			padding: 10px 15px;
+			margin-bottom: 15px;
+			border-radius: 4px;
+			display: none;
+			align-items: center;
+			justify-content: flex-start;
+			gap: 10px;
+			font-size: 13px;
+		}
+		
+		.order-modified-banner.visible {
+			display: flex;
+		}
+		
+		.revert-order-btn {
+			padding: 4px 12px;
+			background-color: var(--vscode-button-secondaryBackground);
+			color: var(--vscode-button-secondaryForeground);
+			border: none;
+			cursor: pointer;
+			font-size: 12px;
+			border-radius: 2px;
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			transition: background-color 0.2s;
+		}
+		
+		.revert-order-btn:hover {
+			background-color: var(--vscode-button-secondaryHoverBackground);
+		}
+		
 		.revert-icon {
 			display: inline-block;
 			margin-left: 8px;
@@ -415,6 +534,37 @@ export class BulkEditPanel {
 			display: flex;
 			align-items: center;
 			gap: 4px;
+		}
+		
+		.drag-handle {
+			cursor: grab;
+			padding: 4px;
+			color: var(--vscode-descriptionForeground);
+			font-size: 16px;
+			user-select: none;
+			opacity: 0.6;
+			transition: opacity 0.2s;
+		}
+		
+		.drag-handle:hover {
+			opacity: 1;
+		}
+		
+		.drag-handle:active {
+			cursor: grabbing;
+		}
+		
+		tbody tr {
+			transition: background-color 0.2s;
+		}
+		
+		tbody tr.dragging {
+			opacity: 0.5;
+			background-color: var(--vscode-list-activeSelectionBackground);
+		}
+		
+		tbody tr.drag-over {
+			border-top: 2px solid var(--vscode-focusBorder);
 		}
 		
 		.scope-header {
@@ -533,6 +683,11 @@ export class BulkEditPanel {
 	<h1>Bulk Edit Buttons</h1>
 	<p class="subtitle">Select multiple buttons to edit or delete in one operation</p>
 	
+	<div class="order-modified-banner" id="orderModifiedBanner">
+		<span>Button order has been modified</span>
+		<button class="revert-order-btn" onclick="revertOrder()" title="Revert to original order">↻</button>
+	</div>
+	
 	<div class="controls">
 		<div class="filter-group">
 			<label>Filter by Type:</label>
@@ -583,17 +738,30 @@ export class BulkEditPanel {
 	<script>
 		const vscode = acquireVsCodeApi();
 		let buttons = ${JSON.stringify(buttons)};
+		let originalButtonOrder = buttons.map(b => b.id); // Store original order
 		let selectedButtons = new Set(); // Now stores button IDs
 		let modifiedExecDirs = new Map(); // Now uses button ID as key
 		let buttonsToDelete = new Set(); // Now stores button IDs
+		let draggedElement = null;
+		let draggedButtonId = null;
+		let draggedButtonScope = null;
 		
 		// Listen for messages from extension
 		window.addEventListener('message', event => {
 			const message = event.data;
 			switch (message.command) {
 				case 'refreshButtons':
-					// Update buttons data
+					// Store old button IDs for comparison
+					const oldButtonIds = new Set(buttons.map(b => b.id));
+					
+					// Update buttons data (already in preserved order from extension)
 					buttons = message.buttons;
+					
+					// Update originalOrder baseline to reflect the new reality
+					// (removes deleted buttons, adds new ones)
+					if (message.originalOrder) {
+						originalButtonOrder = message.originalOrder;
+					}
 					
 					// Clear any selections and modifications that reference deleted buttons
 					const validIds = new Set(buttons.map(b => b.id));
@@ -613,6 +781,7 @@ export class BulkEditPanel {
 					renderTable();
 					
 					console.log('Buttons refreshed. New count:', buttons.length);
+					console.log('Deleted buttons:', [...oldButtonIds].filter(id => !validIds.has(id)));
 					break;
 			}
 		});
@@ -620,8 +789,30 @@ export class BulkEditPanel {
 		// Update the Apply Changes button state
 		function updateApplyButtonState() {
 			const applyButton = document.getElementById('applyButton');
-			const hasChanges = buttonsToDelete.size > 0 || modifiedExecDirs.size > 0;
+			const hasChanges = buttonsToDelete.size > 0 || modifiedExecDirs.size > 0 || isOrderChanged();
 			applyButton.disabled = !hasChanges;
+			
+			// Update order modified banner
+			const banner = document.getElementById('orderModifiedBanner');
+			if (isOrderChanged()) {
+				banner.classList.add('visible');
+			} else {
+				banner.classList.remove('visible');
+			}
+		}
+		
+		function isOrderChanged() {
+			if (buttons.length !== originalButtonOrder.length) {
+				return true;
+			}
+			
+			for (let i = 0; i < buttons.length; i++) {
+				if (buttons[i].id !== originalButtonOrder[i]) {
+					return true;
+				}
+			}
+			
+			return false;
 		}
 		
 		function renderTable() {
@@ -667,6 +858,16 @@ export class BulkEditPanel {
 					tr.style.opacity = '0.6';
 				}
 				
+				// Add drag-and-drop attributes
+				tr.setAttribute('draggable', 'true');
+				tr.setAttribute('data-button-id', buttonId);
+				tr.setAttribute('data-button-scope', button.scope);
+				tr.addEventListener('dragstart', handleDragStart);
+				tr.addEventListener('dragend', handleDragEnd);
+				tr.addEventListener('dragover', handleDragOver);
+				tr.addEventListener('drop', handleDrop);
+				tr.addEventListener('dragleave', handleDragLeave);
+				
 				const cmdPreview = button.scriptFile 
 					? \`run \${button.scriptFile}\`
 					: button.cmd.substring(0, 50) + (button.cmd.length > 50 ? '...' : '');
@@ -689,6 +890,7 @@ export class BulkEditPanel {
 				tr.innerHTML = \`
 					<td>
 						<div class="checkbox-cell">
+							<span class="drag-handle" title="Drag to reorder">⋮⋮</span>
 							<input 
 								type="checkbox" 
 								\${selectedButtons.has(buttonId) ? 'checked' : ''} 
@@ -996,6 +1198,14 @@ export class BulkEditPanel {
 					});
 				}
 			});
+			
+			// Add reorder operation if order changed
+			if (isOrderChanged()) {
+				operations.push({
+					type: 'reorder',
+					newOrder: buttons.map(b => b.id)
+				});
+			}
 		
             if (operations.length === 0) {
                 return; // Button should be disabled, but just in case
@@ -1003,12 +1213,16 @@ export class BulkEditPanel {
 		
             // Show confirmation modal
             const deleteCount = operations.filter(op => op.type === 'delete').length;
-            const updateCount = operations.filter(op => op.type === 'update').length;		
+            const updateCount = operations.filter(op => op.type === 'update').length;
+            const hasReorder = operations.some(op => op.type === 'reorder');
 
             const modal = document.getElementById('submitModal');
             const message = document.getElementById('submitMessage');
             
             let msgText = 'You are about to apply the following changes:\\n\\n';
+            if (hasReorder) {
+                msgText += \`• Reorder all buttons\\n\`;
+            }
             if (updateCount > 0) {
                 msgText += \`• Update \${updateCount} button(s)\\n\`;
             }
@@ -1053,6 +1267,14 @@ export class BulkEditPanel {
 				}
 			});
 			
+			// Add reorder operation if order changed
+			if (isOrderChanged()) {
+				operations.push({
+					type: 'reorder',
+					newOrder: buttons.map(b => b.id)
+				});
+			}
+			
 			closeSubmitModal();
 			actualSubmit(operations);
 		}
@@ -1068,6 +1290,132 @@ export class BulkEditPanel {
 			vscode.postMessage({
 				command: 'cancel'
 			});
+		}
+		
+		function revertOrder() {
+			// Reorder buttons back to original order
+			const buttonMap = new Map(buttons.map(b => [b.id, b]));
+			const reorderedButtons = [];
+			
+			originalButtonOrder.forEach(id => {
+				const button = buttonMap.get(id);
+				if (button) {
+					reorderedButtons.push(button);
+				}
+			});
+			
+			// Add any buttons not in originalOrder (new buttons added after panel opened)
+			buttons.forEach(button => {
+				if (!originalButtonOrder.includes(button.id)) {
+					reorderedButtons.push(button);
+				}
+			});
+			
+			buttons = reorderedButtons;
+			
+			// Notify extension of reorder
+			vscode.postMessage({
+				command: 'reorder',
+				newOrder: buttons.map(b => b.id)
+			});
+			
+			// Re-render table
+			renderTable();
+		}
+		
+		// Drag and Drop Functions
+		function handleDragStart(e) {
+			draggedElement = e.currentTarget;
+			draggedButtonId = e.currentTarget.getAttribute('data-button-id');
+			draggedButtonScope = e.currentTarget.getAttribute('data-button-scope');
+			e.currentTarget.classList.add('dragging');
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+		}
+		
+		function handleDragEnd(e) {
+			e.currentTarget.classList.remove('dragging');
+			
+			// Remove all drag-over classes
+			document.querySelectorAll('.drag-over').forEach(el => {
+				el.classList.remove('drag-over');
+			});
+			
+			draggedElement = null;
+			draggedButtonId = null;
+			draggedButtonScope = null;
+		}
+		
+		function handleDragOver(e) {
+			e.preventDefault();
+			
+			const targetRow = e.currentTarget;
+			const targetButtonScope = targetRow.getAttribute('data-button-scope');
+			
+			// Prevent dropping on different scope
+			if (targetButtonScope && draggedButtonScope && targetButtonScope !== draggedButtonScope) {
+				e.dataTransfer.dropEffect = 'none';
+				targetRow.classList.remove('drag-over');
+				return false;
+			}
+			
+			e.dataTransfer.dropEffect = 'move';
+			
+			if (targetRow !== draggedElement && !targetRow.classList.contains('dragging')) {
+				targetRow.classList.add('drag-over');
+			}
+			
+			return false;
+		}
+		
+		function handleDragLeave(e) {
+			e.currentTarget.classList.remove('drag-over');
+		}
+		
+		function handleDrop(e) {
+			if (e.stopPropagation) {
+				e.stopPropagation();
+			}
+			
+			e.preventDefault();
+			
+			const targetRow = e.currentTarget;
+			const targetButtonId = targetRow.getAttribute('data-button-id');
+			const targetButtonScope = targetRow.getAttribute('data-button-scope');
+			
+			// Don't drop on scope headers or same element
+			if (!targetButtonId || targetButtonId === draggedButtonId) {
+				return false;
+			}
+			
+			// Prevent cross-scope drops
+			if (targetButtonScope !== draggedButtonScope) {
+				return false;
+			}
+			
+			// Find indices
+			const draggedIndex = buttons.findIndex(b => b.id === draggedButtonId);
+			const targetIndex = buttons.findIndex(b => b.id === targetButtonId);
+			
+			if (draggedIndex === -1 || targetIndex === -1) {
+				return false;
+			}
+			
+			// Reorder the buttons array
+			const draggedButton = buttons[draggedIndex];
+			buttons.splice(draggedIndex, 1);
+			buttons.splice(targetIndex, 0, draggedButton);
+			
+			// Notify extension of reorder
+			vscode.postMessage({
+				command: 'reorder',
+				newOrder: buttons.map(b => b.id)
+			});
+			
+			// Re-render table
+			renderTable();
+			
+			return false;
 		}
 		
 		// Initialize
@@ -1094,10 +1442,11 @@ export class BulkEditPanel {
 }
 
 export interface BulkOperation {
-	type: 'delete' | 'update';
-	buttonId: string; // Use button UUID instead of array index
-	button: smartCmdButton;
+	type: 'delete' | 'update' | 'reorder';
+	buttonId?: string; // Use button UUID instead of array index (not needed for reorder)
+	button?: smartCmdButton;
 	changes?: {
 		execDir?: string;
 	};
+	newOrder?: string[]; // For reorder operation
 }

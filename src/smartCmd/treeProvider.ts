@@ -484,9 +484,40 @@ What would you like to do?`;
 
 		let deleteCount = 0;
 		let updateCount = 0;
+		let reordered = false;
 		const errors: string[] = [];
 
-		// Process updates first
+		// Process reorder first (if present)
+		const reorderOp = operations.find(op => op.type === 'reorder');
+		if (reorderOp && reorderOp.newOrder) {
+			try {
+				const buttonMap = new Map(this.buttons.map(b => [b.id!, b]));
+				const reorderedButtons: smartCmdButton[] = [];
+				
+				// Reorder based on newOrder array
+				reorderOp.newOrder.forEach(id => {
+					const button = buttonMap.get(id);
+					if (button) {
+						reorderedButtons.push(button);
+					}
+				});
+				
+				// Add any buttons not in newOrder (shouldn't happen, but safety check)
+				this.buttons.forEach(button => {
+					if (!reorderOp.newOrder!.includes(button.id!)) {
+						reorderedButtons.push(button);
+					}
+				});
+				
+				this.buttons = reorderedButtons;
+				reordered = true;
+			} catch (error) {
+				errors.push('Failed to reorder buttons');
+				console.error('Reorder error:', error);
+			}
+		}
+
+		// Process updates
 		const updateOps = operations.filter(op => op.type === 'update');
 		const deleteOps = operations.filter(op => op.type === 'delete');
 
@@ -504,7 +535,7 @@ What would you like to do?`;
 					updateCount++;
 				}
 			} catch (error) {
-				errors.push(`Failed to update button: ${op.button.name}`);
+				errors.push(`Failed to update button: ${op.button?.name || 'Unknown'}`);
 				console.error('Update error:', error);
 			}
 		}
@@ -528,7 +559,7 @@ What would you like to do?`;
 				this.buttons.splice(index, 1);
 				deleteCount++;
 			} catch (error) {
-				errors.push(`Failed to delete button: ${op.button.name}`);
+				errors.push(`Failed to delete button: ${op.button?.name || 'Unknown'}`);
 				console.error('Delete error:', error);
 			}
 		}
@@ -540,6 +571,9 @@ What would you like to do?`;
 
 			// Show summary
 			const messages: string[] = [];
+			if (reordered) {
+				messages.push('Buttons reordered');
+			}
 			if (updateCount > 0) {
 				messages.push(`${updateCount} button${updateCount !== 1 ? 's' : ''} updated`);
 			}

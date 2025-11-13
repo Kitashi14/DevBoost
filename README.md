@@ -65,7 +65,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
 
 ## Notes
  1. Use extension's UI to manage buttons instead of editing related JSON files directly.
- 1. Use 'Enable Tracking Non-VScode Terminal Session' feature under SmartCmd menu for tracking commands run in sessions like screen, tmux, ssh etc.
+ 2. Use 'Enable Tracking Non-VScode Terminal Session' feature under SmartCmd menu for tracking commands run in sessions like screen, tmux, ssh etc.
 
 
 ## Feedback & Feature Requests
