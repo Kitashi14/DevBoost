@@ -2,7 +2,7 @@
   "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "Boost your productivity through AI-driven tools.",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "publisher": "DevBoost",
   "repository": {
     "type": "git",
@@ -12,7 +12,18 @@
     "vscode": "^1.105.0"
   },
   "categories": [
+    "AI",
     "Other"
+  ],
+  "keywords": [
+    "ai",
+    "productivity",
+    "github copilot",
+    "automation",
+    "terminal",
+    "command",
+    "prompt",
+    "copilot"
   ],
   "activationEvents": [
     "onStartupFinished"
