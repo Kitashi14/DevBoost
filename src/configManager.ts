@@ -80,12 +80,31 @@ async function writeConfig(config: DevBoostConfig, globalStoragePath?: string): 
 async function showModelPicker(
 	module: 'smartCmd' | 'promptEnhancer',
 	currentConfig: { vendor: string; family: string; name?: string } | null,
-	globalStoragePath?: string
+	globalStoragePath?: string,
 ): Promise<vscode.LanguageModelChat | null> {
 	const moduleName = module === 'smartCmd' ? 'SmartCmd' : 'Prompt Enhancer';
-	
-	// Get all available models
-	const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+
+	// Get all available Copilot models with progress indicator
+	const allModels = await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: `Checking available AI models...`,
+		cancellable: false
+	}, async () => {
+		return await vscode.lm.selectChatModels({ vendor: 'copilot' });
+	});
+
+	// check if currentConfig is valid
+	if (currentConfig) {
+		const modelExists = allModels.some(m => 
+			m.family === currentConfig!.family && 
+			m.vendor === currentConfig!.vendor
+		);
+		
+		if (!modelExists) {
+			console.log(`DevBoost: Current config for ${module} references unavailable model, will prompt for new selection`);
+			currentConfig = null;
+		}
+	}
 	
 	if (allModels.length === 0) {
 		vscode.window.showWarningMessage('No GitHub Copilot models available. Please ensure you have GitHub Copilot enabled.');
@@ -244,28 +263,75 @@ export async function getAIModel(module: 'smartCmd' | 'promptEnhancer', globalSt
 			});
 			return savedModel;
 		} else {
-			console.log(`DevBoost: Saved model for ${module} not available, prompting user to select new model`);
+			console.log(`DevBoost: Saved model for ${module} not available, will auto-select recommended model`);
 		}
 	}
 	
-	// No saved model or saved model not available - prompt user to select
+	// No saved model or saved model not available - auto-select recommended model
 	const moduleName = module === 'smartCmd' ? 'SmartCmd' : 'Prompt Enhancer';
-	const selectedModel = await showModelPicker(module, moduleConfig || null, globalStoragePath);
 	
-	if (!selectedModel) {
-		vscode.window.showInformationMessage(`No AI model selected for ${moduleName}.`);
-		return null;
+	// Determine recommended model based on module-specific needs
+	let recommendedModel: vscode.LanguageModelChat;
+	
+	if (module === 'smartCmd') {
+		// SmartCmd: Generates commands/scripts, needs strong code understanding
+		// Priority: best claude-sonnet > best gpt-4o > highest token model
+		const claudeModels = allModels.filter(m => m.family.includes('claude-sonnet'));
+		const gpt4oModels = allModels.filter(m => m.family.includes('gpt-4o') && !m.family.includes('mini'));
+		
+		if (claudeModels.length > 0) {
+			recommendedModel = claudeModels.reduce((best, current) => {
+				const bestVersion = parseFloat(best.family.split('-').pop() || '0');
+				const currentVersion = parseFloat(current.family.split('-').pop() || '0');
+				return currentVersion > bestVersion ? current : best;
+			});
+		} else if (gpt4oModels.length > 0) {
+			recommendedModel = gpt4oModels.reduce((best, current) => {
+				const bestVersion = parseFloat(best.family.split('-').pop() || '0');
+				const currentVersion = parseFloat(current.family.split('-').pop() || '0');
+				return currentVersion > bestVersion ? current : best;
+			});
+		} else {
+			// Fallback: highest token model available
+			recommendedModel = allModels.reduce((best, current) => 
+				current.maxInputTokens > best.maxInputTokens ? current : best
+			);
+		}
+	} else {
+		// Prompt Enhancer: Optimizes natural language prompts
+		// Priority: best gpt-4o > best claude-sonnet > highest token model
+		const gpt4oModels = allModels.filter(m => m.family.includes('gpt-4o') && !m.family.includes('mini'));
+		const claudeModels = allModels.filter(m => m.family.includes('claude-sonnet'));
+		
+		if (gpt4oModels.length > 0) {
+			recommendedModel = gpt4oModels.reduce((best, current) => {
+				const bestVersion = parseFloat(best.family.split('-').pop() || '0');
+				const currentVersion = parseFloat(current.family.split('-').pop() || '0');
+				return currentVersion > bestVersion ? current : best;
+			});
+		} else if (claudeModels.length > 0) {
+			recommendedModel = claudeModels.reduce((best, current) => {
+				const bestVersion = parseFloat(best.family.split('-').pop() || '0');
+				const currentVersion = parseFloat(current.family.split('-').pop() || '0');
+				return currentVersion > bestVersion ? current : best;
+			});
+		} else {
+			// Fallback: highest token model available
+			recommendedModel = allModels.reduce((best, current) => 
+				current.maxInputTokens > best.maxInputTokens ? current : best
+			);
+		}
 	}
 	
-	// Save the selection for this module
+	// Save the recommended model as default
 	const newConfig: DevBoostConfig = {
 		...config,
 		aiModel: {
 			...config?.aiModel,
 			[module]: {
-				vendor: selectedModel.vendor,
-				family: selectedModel.family,
-				name: selectedModel.name
+				vendor: recommendedModel.vendor,
+				family: recommendedModel.family,
+				name: recommendedModel.name
 			}
 		}
 	};
@@ -273,18 +339,14 @@ export async function getAIModel(module: 'smartCmd' | 'promptEnhancer', globalSt
 	const saved = await writeConfig(newConfig, globalStoragePath);
 	
 	if (saved) {
-		vscode.window.showInformationMessage(
-			`${moduleName} AI Model set to: ${selectedModel.name || selectedModel.family}`
-		);
+		console.log(`DevBoost: Auto-configured ${moduleName} with recommended AI model:`, {
+			family: recommendedModel.family,
+			name: recommendedModel.name,
+			vendor: recommendedModel.vendor
+		});
 	}
 	
-	console.log(`DevBoost: Selected and saved AI model for ${module}:`, { 
-		family: selectedModel.family, 
-		name: selectedModel.name,
-		vendor: selectedModel.vendor
-	});
-	
-	return selectedModel;
+	return recommendedModel;
 }
 
 /**
