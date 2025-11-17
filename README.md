@@ -1,77 +1,219 @@
-# DevBoost Extension Features
+# DevBoost
 
-DevBoost is a Visual Studio Code extension designed to supercharge developer productivity with AI-powered automation and workflow enhancements. Here are the key features:
+[![Version](https://img.shields.io/badge/version-0.7.2-blue.svg)](https://open-vsx.org/extension/DevBoost/devboostextension)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.105.0%2B-blue.svg)](https://code.visualstudio.com/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-## Main Features
+> AI-powered VS Code extension for creating custom command buttons and enhancing prompts with GitHub Copilot.
 
-- **SmartCmd Automation Buttons**
-  - Create one-click buttons for your most-used commands
-  - AI analyzes your workflow to suggest useful automations
-  - Manually create custom buttons without AI if you prefer
-  - Add dynamic input fields for runtime variables (e.g., commit messages, environment names)
-  - Supports both simple commands and complex multi-step scripts
-  - Buttons can be workspace-specific or global across all projects
+**DevBoost** automates repetitive development tasks by learning from your workflow patterns and creating one-click command buttons. It also helps you write better AI prompts with built-in enhancement tools.
 
-- **AI-Powered Button Creation**
-  - Describe what you want in natural language, and AI generates the button
-  - AI suggests buttons based on your recent development activity
-  - Review, edit, and approve all AI suggestions before saving
-  - AI handles platform-specific command syntax automatically
+## ✨ Features
 
-- **Manual Button Creation**
-  - Create buttons without AI assistance for full control
-  - Define button name, command, execution directory, and description
-  - Add input placeholders for dynamic values at execution time
-  - Choose between workspace-only or global availability
-  - Edit existing buttons to align with what you want
+### 🤖 SmartCmd - Custom Command Buttons
 
-- **Prompt Enhancer**
-  - Improve your AI prompts for clarity, tone, and structure
-  - Choose from multiple enhancement options (tone, formality, length)
-  - Enhance prompts from editor selection or clipboard
-  - Apply different styles: Professional, Casual, Technical, Friendly, Assertive
-  - Adjust formality and length to match your needs
+Create reusable command buttons for your frequent terminal operations:
 
-- **Script Support**
-  - Generate and run multi-step scripts from a single button
-  - AI creates scripts with error handling and conditional logic
-  - View and edit script files directly in VS Code
-  - Supports platform-specific commands (Windows, macOS, Linux)
-  - Input fields work with scripts for dynamic variables
+- **Activity Tracking**: Logs terminal commands, tasks, debug session with execution context and exit codes.
+- **AI-Generated Buttons**: Analyzes your activity log to suggest smart automation buttons
+- **Manual Creation**: Create custom buttons with or without AI assistance  
+- **Script Support**: Generate multi-step shell scripts for complex workflows
+- **Scope Management**: Global buttons (all workspaces) or workspace-specific buttons
+- **Bulk Operations**: Edit, delete, or reorder multiple buttons at once with drag-and-drop
+- **Dynamic Inputs**: Add runtime prompts for flexible command execution
 
-- **Button Management**
-  - Copy workspace buttons to global scope for reuse across projects
-  - Delete, edit, and reorganize buttons easily
-  - Execute buttons with a single click
-  - View button commands and descriptions in tooltips
-  - Open and edit button configuration files directly
+### 🔄 Prompt Enhancer
 
-- **Cross-Platform Compatibility**
-  - Works seamlessly on Windows, macOS, and Linux
-  - Adapts commands and scripts to your shell environment (bash, zsh, PowerShell, cmd)
-  - Platform-aware command generation
+Improve your AI prompts before sending them:
 
-## Quick Actions
+- **Quick Enhancement**: Refine prompts for clarity, grammar, and structure
+- **Tone Control**: Adjust formality and style (Professional, Casual, Technical, etc.)
+- **Length Adjustment**: Make prompts shorter or more detailed
+- **Selection Support**: Enhance selected text directly in the editor
 
-- **Open DevBoost Sidebar** - Click the 🚀 rocket icon in VS Code's activity bar
-- **Generate AI-Suggested Buttons** - Click ✨ sparkle icon to analyze your workflow and create automation buttons
-- **Create Custom Button** - Click ➕ plus icon to manually create buttons or use AI assistance
-- **Execute Buttons** - Single-click any button to run commands instantly
-- **Enhance Prompts** - Use Command Palette to improve AI prompts with professional refinement
-- **Edit & Manage Buttons** - Right-click buttons to edit, delete, or copy to global scope
-- **View Scripts** - Right-click script buttons (📜) to view and edit script files
-- **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
-- **Bulk Edit Buttons** - Click 🖌️ to select multiple buttons for bulk edit
+## Quick Start
 
-## Notes
- 1. Use extension's UI to manage buttons instead of editing related JSON files directly.
- 2. Use 'Enable Tracking Non-VScode Terminal Session' feature under SmartCmd menu for tracking commands run in sessions like screen, tmux, ssh etc.
+### Prerequisites
+
+- **VS Code**: 1.105.0 or higher
+- **GitHub Copilot**: Required for AI features (active subscription)
+- **Node.js**: 16.x or higher (for development)
+
+### Installation
+
+#### From VS Code Marketplace (Recommended)
+
+1. Open VS Code
+2. Go to Extensions (`Ctrl+Shift+X` / `Cmd+Shift+X`)
+3. Search for **"DevBoost"**
+4. Click **Install**
+
+Or install directly:
+- **VS Code Marketplace**: [DevBoost Extension](https://marketplace.visualstudio.com/items?itemName=DevBoost.devboostextension)
+- **Open VSX Registry**: [DevBoost on Open VSX](https://open-vsx.org/extension/DevBoost/devboostextension)
+
+#### From Source
+
+```bash
+git clone https://github.com/Kitashi14/DevBoost.git
+cd DevBoost
+npm install
+npm run compile
+# Press F5 to launch Extension Development Host
+```
+
+### Basic Usage
+
+1. **Open DevBoost**: Click the 🚀 rocket icon in VS Code's activity bar
+2. **Create Your First Button**:
+   - Click ➕ in SmartCmd view
+   - Choose **Global** or **Workspace** scope
+   - Use AI assistance or create manually
+   - Add command, name, and description
+3. **Execute**: Click any button to run its command
+4. **Manage**: Right-click buttons to edit, delete, or view scripts
+
+## Documentation
+
+### SmartCmd Commands
+
+**Available Commands** (Command Palette: `Ctrl+Shift+P` / `Cmd+Shift+P`):
+
+- `DevBoost: Create AI Buttons` - Generate buttons from activity log
+- `DevBoost: Create Custom Button` - Manual or AI-assisted button creation
+- `DevBoost: Bulk Edit Buttons` - Multi-select operations and drag-drop reordering
+- `DevBoost: Configure AI Model` - Choose AI model for SmartCmd
+
+**Button Features**:
+
+- **Input Fields**: Add `{variable}` placeholders for runtime values
+- **Execution Directory**: Specify where commands run (e.g., `<workspace>`, `.`, or custom path)
+- **Scripts**: Complex workflows stored as executable shell scripts
+- **Cross-Platform**: Auto-detects OS for platform-specific commands
+
+**Bulk Edit Panel** (`DevBoost: Bulk Edit Buttons`):
+- Drag-and-drop to reorder buttons (within same scope)
+- Multi-select with scope-level checkboxes
+- Bulk actions: Set execution directory, delete multiple buttons
+- Filter by type (scripts vs commands)
+
+### Prompt Enhancer Commands
+
+- `DevBoost: Show Prompt Enhancer` - Open enhancement UI
+- `DevBoost: Quick Enhance from Clipboard` - Fast enhancement from clipboard
+- `DevBoost: Configure AI Model` - Choose AI model for enhancements
+
+### File Locations
+
+**Workspace Files** (`.vscode/devBoost/`):
+- `smartCmd.json` - Workspace button definitions
+- `scripts/` - Workspace-specific script files
+- `activity.log` - Development activity tracking (auto-cleanup enabled)
+- `ai_prompts_enhancer.log` - AI interaction logs for debugging, disabled in release version.
+
+**Global Files** (Extension Storage):
+- Global button definitions
+- Global script files
+- AI model configuration file
+
+## 🛠️ Development
+
+### Project Structure
+
+```
+src/
+├── extension.ts              # Main extension entry
+├── activityLogging.ts        # Activity tracking system
+├── configManager.ts          # Configuration management
+├── smartCmd/
+│   ├── handlers.ts           # Button execution & management
+│   ├── aiServices.ts         # AI integration for SmartCmd
+│   ├── treeProvider.ts       # VS Code tree view provider
+│   ├── scriptManager.ts      # Script generation & storage
+│   └── view/
+│       ├── bulkEditPanel.ts  # Bulk operations UI
+│       ├── manualButtonFormPanel.ts
+│       └── editButtonFormPanel.ts
+└── promptEnhancer/
+    ├── promptEnhancer.ts     # Prompt enhancement logic
+    ├── aiServices.ts         # AI integration for prompts
+    ├── handlers.ts           # Enhancement handlers
+    └── treeProvider.ts       # Tree view provider
+```
+
+### Build & Test
+
+```bash
+# Install dependencies
+npm install
+
+# Compile TypeScript
+npm run compile
+
+# Watch mode (auto-compile on save)
+npm run watch
+
+# Run extension in debug mode
+# Press F5 in VS Code
+
+# Package extension
+npm run package
+```
+
+### Contributing
+
+Contributions are welcome! We appreciate any improvements or new features. Here's how to get started:
+
+1. **Fork the Repository**
+2. **Create a Feature Branch**:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+3. **Make Your Changes**:
+   - Follow TypeScript best practices
+   - Test your changes thoroughly
+   - Ensure cross-platform compatibility (Windows/macOS/Linux)
+4. **Commit** with clear messages:
+   ```bash
+   git commit -m "feat: add bulk delete with confirmation"
+   ```
+5. **Push and Open a PR**:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+**Contribution Guidelines**:
+- Use descriptive commit messages (conventional commits format preferred)
+- Update README if adding user-facing features
+
+### Reporting Issues
+
+Found a bug? Have a feature request? [Open an issue](https://github.com/Kitashi14/DevBoost/issues) with:
 
 
-## Feedback & Feature Requests
+## Privacy & Security
 
-Help us improve DevBoost by sharing your thoughts, suggestions, or reporting issues.
+- All data is stored locally in `.vscode/devBoost/` and extension storage
+- No telemetry or external data transmission
+- AI interactions use your GitHub Copilot subscription only
 
-**[Submit Form](https://forms.gle/f5yhuX2UxUsgdXpu6)**
+## License
 
-----
+This project is licensed under the GNU General Public License v3.0 - see [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **GitHub Copilot** - Powers AI features
+- **VS Code Extension API** - Seamless IDE integration
+- **Open Source Community** - For inspiration and support
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/Kitashi14/DevBoost/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Kitashi14/DevBoost/discussions)
+- **Repository**: [github.com/Kitashi14/DevBoost](https://github.com/Kitashi14/DevBoost)
+
+---
+
+Made with ❤️ by developers, for developers. Star ⭐ if you find this useful!
