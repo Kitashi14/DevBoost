@@ -19,7 +19,7 @@ out/test/**
 
 # Exclude personal and development files
 personal_notes.txt
-HACKATHON_PRESENTATION.md
+.md
 
 # Exclude development scripts
 .npmignore

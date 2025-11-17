@@ -745,6 +745,13 @@ export class BulkEditPanel {
 		let draggedElement = null;
 		let draggedButtonId = null;
 		let draggedButtonScope = null;
+		let autoScrollInterval = null;
+
+		window.addEventListener('dragleave', (e) => {
+			if (autoScrollInterval) {
+				stopAutoScroll();
+			}
+		});
 		
 		// Listen for messages from extension
 		window.addEventListener('message', event => {
@@ -1323,6 +1330,44 @@ export class BulkEditPanel {
 			renderTable();
 		}
 		
+		// Auto-scroll functions for drag and drop
+		function startAutoScroll(e) {
+			// Initialize auto-scroll if needed
+			updateAutoScroll(e);
+		}
+		
+		function stopAutoScroll() {
+			if (autoScrollInterval) {
+				clearInterval(autoScrollInterval);
+				autoScrollInterval = null;
+			}
+		}
+		
+		function updateAutoScroll(e) {
+			const scrollZone = 80; // pixels from edge to trigger scroll
+			const scrollSpeed = 10; // pixels to scroll per interval
+			
+			// Get the viewport position
+			const viewportY = e.clientY;
+			const viewportHeight = window.innerHeight;
+			
+			// Stop existing auto-scroll
+			stopAutoScroll();
+			
+			// Check if near top edge
+			if (viewportY < scrollZone) {
+				autoScrollInterval = setInterval(() => {
+					window.scrollBy(0, -scrollSpeed);
+				}, 10);
+			}
+			// Check if near bottom edge
+			else if (viewportY > viewportHeight - scrollZone) {
+				autoScrollInterval = setInterval(() => {
+					window.scrollBy(0, scrollSpeed);
+				}, 10);
+			}
+		}
+		
 		// Drag and Drop Functions
 		function handleDragStart(e) {
 			draggedElement = e.currentTarget;
@@ -1331,6 +1376,9 @@ export class BulkEditPanel {
 			e.currentTarget.classList.add('dragging');
 			e.dataTransfer.effectAllowed = 'move';
 			e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+			
+			// Start auto-scroll on drag
+			startAutoScroll(e);
 		}
 		
 		function handleDragEnd(e) {
@@ -1341,6 +1389,9 @@ export class BulkEditPanel {
 				el.classList.remove('drag-over');
 			});
 			
+			// Stop auto-scroll
+			stopAutoScroll();
+			
 			draggedElement = null;
 			draggedButtonId = null;
 			draggedButtonScope = null;
@@ -1348,6 +1399,9 @@ export class BulkEditPanel {
 		
 		function handleDragOver(e) {
 			e.preventDefault();
+			
+			// Update auto-scroll based on cursor position
+			updateAutoScroll(e);
 			
 			const targetRow = e.currentTarget;
 			const targetButtonScope = targetRow.getAttribute('data-button-scope');

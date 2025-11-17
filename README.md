@@ -1,10 +1,10 @@
-# DevBoost Extension Features
+# DevBoost
 
-DevBoost is a Visual Studio Code extension designed to supercharge developer productivity with AI-powered automation and workflow enhancements. Here are the key features:
+Create interactive buttons that execute specific command chains or script files. Enhance any prompt or text with one click or provide more context for detailed enhancement.
 
-## Main Features
+## SmartCmd Features
 
-- **SmartCmd Automation Buttons**
+- **Automation Buttons**
   - Create one-click buttons for your most-used commands
   - AI analyzes your workflow to suggest useful automations
   - Manually create custom buttons without AI if you prefer
@@ -13,7 +13,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
   - Buttons can be workspace-specific or global across all projects
 
 - **AI-Powered Button Creation**
-  - Describe what you want in natural language, and AI generates the button
+  - Describe what you want in natural language, enhance the prompt and AI generates the button
   - AI suggests buttons based on your recent development activity
   - Review, edit, and approve all AI suggestions before saving
   - AI handles platform-specific command syntax automatically
@@ -23,14 +23,6 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
   - Define button name, command, execution directory, and description
   - Add input placeholders for dynamic values at execution time
   - Choose between workspace-only or global availability
-  - Edit existing buttons to align with what you want
-
-- **Prompt Enhancer**
-  - Improve your AI prompts for clarity, tone, and structure
-  - Choose from multiple enhancement options (tone, formality, length)
-  - Enhance prompts from editor selection or clipboard
-  - Apply different styles: Professional, Casual, Technical, Friendly, Assertive
-  - Adjust formality and length to match your needs
 
 - **Script Support**
   - Generate and run multi-step scripts from a single button
@@ -51,22 +43,45 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
   - Adapts commands and scripts to your shell environment (bash, zsh, PowerShell, cmd)
   - Platform-aware command generation
 
+## Prompt Enhancer Features
+
+- **Quick Enhance**
+  - One-click enhancement from clipboard text
+  - Instantly improves clarity, specificity, and effectiveness
+  - Enhanced prompt automatically copied back to clipboard
+  - Preview results or view full comparison in editor
+  - Fast refinement without manual configuration
+
+- **Prompt Enhancer Interface**
+  - Analyze prompts and get AI-powered improvement suggestions
+  - Apply selected enhancements to refine your prompts
+  - Generate new prompts from high-level intent descriptions
+  - Interactive webview with real-time feedback
+  - Copy enhanced results directly to clipboard
+
 ## Quick Actions
 
+**SmartCmd:**
 - **Open DevBoost Sidebar** - Click the 🚀 rocket icon in VS Code's activity bar
 - **Generate AI-Suggested Buttons** - Click ✨ sparkle icon to analyze your workflow and create automation buttons
 - **Create Custom Button** - Click ➕ plus icon to manually create buttons or use AI assistance
 - **Execute Buttons** - Single-click any button to run commands instantly
-- **Enhance Prompts** - Use Command Palette to improve AI prompts with professional refinement
 - **Edit & Manage Buttons** - Right-click buttons to edit, delete, or copy to global scope
 - **View Scripts** - Right-click script buttons (📜) to view and edit script files
-- **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
 - **Bulk Edit Buttons** - Click 🖌️ to select multiple buttons for bulk edit
+- **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
+
+**Prompt Enhancer:**
+- **Quick Enhance** - Copy text to clipboard, run command from Command Palette (`DevBoost: Quick Enhance`), get enhanced result instantly
+- **Open Prompt Enhancer** - Use Command Palette (`DevBoost: Show Prompt Enhancer`) to access full interface
+- **Analyze & Improve** - Paste your prompt, get AI suggestions, select improvements to apply
+- **Generate from Intent** - Describe what you want, AI generates a complete prompt for you
+
 
 ## Notes
  1. Use extension's UI to manage buttons instead of editing related JSON files directly.
  2. Use 'Enable Tracking Non-VScode Terminal Session' feature under SmartCmd menu for tracking commands run in sessions like screen, tmux, ssh etc.
-
+ 3. Configure different AI model for SmartCmd and Prompt Enhancer from their menu button.
 
 ## Feedback & Feature Requests
 
