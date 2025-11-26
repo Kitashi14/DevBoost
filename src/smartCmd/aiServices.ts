@@ -88,13 +88,6 @@ export async function enhancePrompt(
 	globalStoragePath?: string
 ): Promise<string | null> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			console.log('No AI model available for prompt enhancement');
-			return null;
-		}
-
 		const { platform, shell } = getSystemInfo();
 
 		const prompt = `You are an expert at helping developers create precise command descriptions for automation buttons.
@@ -145,19 +138,14 @@ IMPORTANT:
 
 Respond with ONLY the enhanced description text, nothing else.`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt, globalStoragePath);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('enhancePrompt', prompt, fullResponse, {
 			originalPrompt,
 			scope,
-			model: model.family
+			model: response.model
 		});
 
 		return fullResponse.trim();
@@ -215,12 +203,6 @@ export async function checkDuplicateButton(
 
 	// Use AI for semantic similarity check
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			return null;
-		}
-
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.description || 'N/A';
 			const user_prompt = b.user_prompt || 'N/A';
@@ -266,22 +248,17 @@ Eg:
 
 If it's unique, respond with only "UNIQUE".`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+		console.log('AI duplicate detection prompt:', prompt);
 
-        console.log('AI duplicate detection prompt:', prompt);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('checkDuplicateButton', prompt, fullResponse, {
 			newButton: { name: newButton.name, execDir: newButton.execDir, cmd: newButton.cmd },
 			targetScope,
 			existingButtonsCount: buttonsToCheck.length,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('AI duplicate detection response:', fullResponse);
@@ -350,13 +327,6 @@ If it's unique, respond with only "UNIQUE".`;
  */
 export async function checkIfButtonIsGlobalSafe(button: smartCmdButton, globalStoragePath?: string): Promise<{ isSafe: boolean; reason?: string }> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			console.log('DevBoost: No AI model available for global safety check');
-			return { isSafe: true };
-		}
-
 		const prompt = `Analyze this VS Code button command to determine if it's safe to use globally across all projects, or if it's workspace-specific.
 
 Button Details:
@@ -396,20 +366,16 @@ SAFE
 {"status": "UNSAFE", "reason": "Uses relative path ./src which assumes specific project structure"}
 {"status": "UNSAFE", "reason": "Runs npm script 'deploy-prod' which may not exist in other projects"}`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-        console.log('DevBoost: Global safety check prompt:', prompt);
+		console.log('DevBoost: Global safety check prompt:', prompt);
 
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
 			button: { name: button.name, execDir: button.execDir, cmd: button.cmd },
 			currentScope: button.scope,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('DevBoost: Global safety check response:', fullResponse);
@@ -451,12 +417,6 @@ export async function getAISuggestions(
 	globalStoragePath?: string
 ): Promise<smartCmdButton[]> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			vscode.window.showWarningMessage('No AI model configured. Using fallback suggestions.');
-			return getFallbackSuggestions([]);
-		}
 		const { platform, shell } = getSystemInfo();
 		let workspaceName = 'N/A';
 		let workspacePath = 'N/A';
@@ -472,9 +432,9 @@ export async function getAISuggestions(
 			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}`;
 		}).join('\n');
 
-	
-	const prompt = 
-	`You are an elite DevOps automation expert creating intelligent command buttons for a developer's specific workflow.
+
+		const prompt =
+			`You are an elite DevOps automation expert creating intelligent command buttons for a developer's specific workflow.
 
 🖥️  SYSTEM ENVIRONMENT:
 - OS: ${platform} | Shell: ${shell}
@@ -693,24 +653,16 @@ Analyze the sequential logs carefully and generate 3-5 buttons that automate the
 Choose between cmd and scriptContent based on workflow complexity.
 RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 
-		// Log prompt for development
-		
-
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('AI button suggestions prompt:', prompt);
-		
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		await logPromptToFile('getAISuggestions', prompt, fullResponse, {
 			platform,
 			shell,
 			recentLogsCount: optimizedLog.recentLogs.length,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('AI response for button suggestions:', fullResponse);
@@ -728,7 +680,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 					b.scriptContent = undefined;
 					b.scriptFile = undefined;
 				}
-				b.modelUsed = model.family;
+				b.modelUsed = response.model;
 			});
 			return buttons.filter(b => b.name && (b.cmd || b.scriptContent));
 		}
@@ -759,12 +711,6 @@ export async function getCustomButtonSuggestion(
 	existingButtons: smartCmdButton[] = []
 ): Promise<smartCmdButton | null> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			vscode.window.showInformationMessage('No AI model configured. Please enter button details manually.');
-			return null;
-		}
 		const { platform, shell } = getSystemInfo();
 
 		const buttonsToCheck = scope === 'global'
@@ -978,15 +924,10 @@ WRONG FORMAT - SCRIPT
 Only respond with the JSON object, no additional text.`;
 
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('Custom button prompt:', prompt);
 
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('getCustomButtonSuggestion', prompt, fullResponse, {
@@ -995,7 +936,7 @@ Only respond with the JSON object, no additional text.`;
 			platform,
 			shell,
 			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('AI response for custom button:', fullResponse);
@@ -1013,14 +954,14 @@ Only respond with the JSON object, no additional text.`;
 				if (button.name && (button.cmd || button.scriptContent) && button.description) {
 					button.user_prompt = description;
 					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
-					if(button.scriptContent?.trim().length) {
+					if (button.scriptContent?.trim().length) {
 						button.cmd = '';
 					}
 					else {
 						button.scriptContent = undefined;
 						button.scriptFile = undefined;
 					}
-					button.modelUsed = model.family;
+					button.modelUsed = response.model;
 					console.log('Successfully parsed button:', button);
 					return button;
 				}
