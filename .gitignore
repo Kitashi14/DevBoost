@@ -5,3 +5,6 @@ out/
 *.vsix
 *.diff
 *.md
+!README.md
+!CONTRIBUTING.md
+!LICENSE.md

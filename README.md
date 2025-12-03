@@ -5,13 +5,15 @@
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.105.0%2B-blue.svg)](https://code.visualstudio.com/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-> AI-powered VS Code extension for creating custom command buttons and enhancing prompts with GitHub Copilot.
+> AI-powered VS Code extension for creating custom command buttons and enhancing prompts.
 
 **DevBoost** automates repetitive development tasks by learning from your workflow patterns and creating one-click command buttons. It also helps you write better AI prompts with built-in enhancement tools.
 
 ## ✨ Features
 
 ### 🤖 SmartCmd - Custom Command Buttons
+
+![SmartCmd Demo](images/devboost1.gif)
 
 Create reusable command buttons for your frequent terminal operations:
 
@@ -25,6 +27,7 @@ Create reusable command buttons for your frequent terminal operations:
 
 ### 🔄 Prompt Enhancer
 
+![SmartCmd Demo](images/devboost4.gif)
 Improve your AI prompts before sending them:
 
 - **Quick Enhancement**: Refine prompts for clarity, grammar, and structure
@@ -37,7 +40,7 @@ Improve your AI prompts before sending them:
 ### Prerequisites
 
 - **VS Code**: 1.105.0 or higher
-- **GitHub Copilot**: Required for AI features (active subscription)
+- **AI Provider**: GitHub Copilot (recommended), or configure other providers (OpenAI, Claude, Gemini, Ollama)
 - **Node.js**: 16.x or higher (for development)
 
 ### Installation
@@ -83,7 +86,8 @@ npm run compile
 - `DevBoost: Create AI Buttons` - Generate buttons from activity log
 - `DevBoost: Create Custom Button` - Manual or AI-assisted button creation
 - `DevBoost: Bulk Edit Buttons` - Multi-select operations and drag-drop reordering
-- `DevBoost: Configure AI Model` - Choose AI model for SmartCmd
+- `DevBoost: Configure AI Model` - Switch between AI providers (Copilot, OpenAI, Claude, Gemini, Ollama)
+- `DevBoost: Manage API Keys` - Store API keys securely for different providers
 
 **Button Features**:
 
@@ -100,9 +104,9 @@ npm run compile
 
 ### Prompt Enhancer Commands
 
-- `DevBoost: Show Prompt Enhancer` - Open enhancement UI
-- `DevBoost: Quick Enhance from Clipboard` - Fast enhancement from clipboard
-- `DevBoost: Configure AI Model` - Choose AI model for enhancements
+- `DevBoost: Show Prompt Enhancer` - Open enhancement UI with analyze & generate features
+- `DevBoost: Quick Enhance from Clipboard` - One-click enhancement from clipboard
+- `DevBoost: Configure AI Model` - Switch between AI providers
 
 ### File Locations
 
@@ -115,7 +119,8 @@ npm run compile
 **Global Files** (Extension Storage):
 - Global button definitions
 - Global script files
-- AI model configuration file
+- AI provider configuration
+- Encrypted API keys (when using external providers)
 
 ## 🛠️ Development
 
@@ -123,22 +128,41 @@ npm run compile
 
 ```
 src/
-├── extension.ts              # Main extension entry
+├── extension.ts              # Main extension entry point
 ├── activityLogging.ts        # Activity tracking system
 ├── configManager.ts          # Configuration management
-├── smartCmd/
+├── shellHooks.ts             # Shell integration hooks
+├── ai/                       # AI provider system
+│   ├── aiProvider.ts         # Base AI provider interface
+│   ├── providerManager.ts    # Provider selection & management
+│   ├── types.ts              # AI provider type definitions
+│   ├── index.ts              # AI module exports
+│   └── providers/            # Multiple AI provider implementations
+│       ├── vscodeCopilotProvider.ts  # GitHub Copilot integration
+│       ├── anthropicProvider.ts      # Claude API support
+│       ├── openaiProvider.ts         # OpenAI/ChatGPT support
+│       ├── geminiProvider.ts         # Google Gemini support
+│       ├── ollamaProvider.ts         # Local Ollama support
+│       ├── cursorProvider.ts         # Cursor AI support
+│       └── index.ts
+├── commonView/               # Shared UI components
+│   ├── customDialog.ts       # Custom dialog utilities
+│   └── inputFormPanel.ts     # Input form webview
+├── smartCmd/                 # SmartCmd feature module
+│   ├── activateExt.ts        # SmartCmd initialization
 │   ├── handlers.ts           # Button execution & management
 │   ├── aiServices.ts         # AI integration for SmartCmd
 │   ├── treeProvider.ts       # VS Code tree view provider
 │   ├── scriptManager.ts      # Script generation & storage
-│   └── view/
-│       ├── bulkEditPanel.ts  # Bulk operations UI
-│       ├── manualButtonFormPanel.ts
-│       └── editButtonFormPanel.ts
-└── promptEnhancer/
-    ├── promptEnhancer.ts     # Prompt enhancement logic
+│   └── view/                 # SmartCmd UI panels
+│       ├── bulkEditPanel.ts              # Bulk operations UI
+│       ├── manualButtonFormPanel.ts      # Manual button creation
+│       ├── editButtonFormPanel.ts        # Button editing UI
+│       └── aiButtonDescriptionPanel.ts   # AI button preview
+└── promptEnhancer/           # Prompt Enhancer feature module
+    ├── promptEnhancer.ts     # Core enhancement logic
     ├── aiServices.ts         # AI integration for prompts
-    ├── handlers.ts           # Enhancement handlers
+    ├── handlers.ts           # Enhancement handlers & webview
     └── treeProvider.ts       # Tree view provider
 ```
 
@@ -161,42 +185,17 @@ npm run watch
 npm run package
 ```
 
-### Contributing
+## Contributing
 
-Contributions are welcome! We appreciate any improvements or new features. Here's how to get started:
-
-1. **Fork the Repository**
-2. **Create a Feature Branch**:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. **Make Your Changes**:
-   - Follow TypeScript best practices
-   - Test your changes thoroughly
-   - Ensure cross-platform compatibility (Windows/macOS/Linux)
-4. **Commit** with clear messages:
-   ```bash
-   git commit -m "feat: add bulk delete with confirmation"
-   ```
-5. **Push and Open a PR**:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-**Contribution Guidelines**:
-- Use descriptive commit messages (conventional commits format preferred)
-- Update README if adding user-facing features
-
-### Reporting Issues
-
-Found a bug? Have a feature request? [Open an issue](https://github.com/Kitashi14/DevBoost/issues) with:
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
 
 
 ## Privacy & Security
 
-- All data is stored locally in `.vscode/devBoost/` and extension storage
-- No telemetry or external data transmission
-- AI interactions use your GitHub Copilot subscription only
+- All data stored locally in `.vscode/devBoost/` and extension storage
+- API keys encrypted and stored securely in VS Code secret storage
+- No telemetry or analytics collected
+- Choose your AI provider: GitHub Copilot, OpenAI, Claude, Gemini, or local Ollama
 
 ## License
 
@@ -204,7 +203,7 @@ This project is licensed under the GNU General Public License v3.0 - see [LICENS
 
 ## 🙏 Acknowledgments
 
-- **GitHub Copilot** - Powers AI features
+- **AI Providers** - GitHub Copilot, OpenAI, Anthropic Claude, Google Gemini, Ollama
 - **VS Code Extension API** - Seamless IDE integration
 - **Open Source Community** - For inspiration and support
 
