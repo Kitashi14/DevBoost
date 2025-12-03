@@ -22,13 +22,21 @@ export async function initializeAISystem(
 
     // Register all providers
     const vsCodeCopilotProvider = new VSCodeCopilotProvider();
-    if(await vsCodeCopilotProvider.isAvailable()) {
+    vsCodeCopilotProvider.initialize(context);
+    if((await vsCodeCopilotProvider.isAvailable()).available) {
         manager.registerProvider(vsCodeCopilotProvider);
     }
     // manager.registerProvider(new CursorProvider());
     manager.registerProvider(new OpenAIProvider());
     manager.registerProvider(new AnthropicProvider());
-    manager.registerProvider(new OllamaProvider());
+
+    const ollamaProvider = new OllamaProvider();
+    await ollamaProvider.initialize(context);
+    const port = await context.secrets.get(`devboost.${ollamaProvider.id}.port`);
+    console.warn('Ollama port from secrets:', port);
+    ollamaProvider.port = port ? Number(port) : 11434;
+    console.log('Ollama provider port set to:', ollamaProvider.port);
+    manager.registerProvider(ollamaProvider);
     manager.registerProvider(new GeminiProvider());
 
     // Initialize the manager

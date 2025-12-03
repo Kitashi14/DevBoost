@@ -508,6 +508,7 @@ SIMPLE COMMAND CHAIN:
 COMPLEX SCRIPT:
 • If you see: "cd frontend && npm install" → "cd ../backend && npm install" → "cd .. && docker-compose up"
   Use scriptContent with proper directory management and error handling
+• If script requires any user input as arguments then definitely add '{variableName}' for taking inputs
 
 🔧 ${platform} COMMAND REQUIREMENTS:
 ${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed\n• Scripts: Use batch script syntax (.bat)' : ''}
@@ -597,7 +598,7 @@ WITH INPUT FIELDS - SCRIPT FORMAT:
     {
         "name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
-        "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi",
+        "scriptContent": "if [ -z \"$1\" ]; then\\n  echo \"Error: Environment not specified\"\\n  exit 1\\nfi\\nENV=\"$1\"\\necho \"Deploying to $ENV\"\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:$ENV\\nelse\\n  echo \"Build failed, aborting deployment\"\\n  exit 1\\nfi",
 		"scriptFile": "deploy_to_env.sh",
         "description": "Builds project and deploys to specified environment with error checking",
         "inputs": [
@@ -609,20 +610,20 @@ WITH INPUT FIELDS - SCRIPT FORMAT:
     },
     {
         "name": "🐍 Process Data with Python",
-        "execDir": "<workspace>",
-        "scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No filename provided')\\n    sys.exit(1)\\n\\nfilename = sys.argv[1]\\noutput_file = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {filename}')\\nprint(f'Output will be saved to: {output_file}')\\n\\nif not os.path.exists(filename):\\n    print(f'Error: File {filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_file, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_file}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
-        "scriptFile": "process_data.py",
-        "description": "Python script that reads a file and generates statistics with custom input and output filenames",
-        "inputs": [
-            {
-                "placeholder": "Input filename (e.g., data.txt)",
-                "variable": "{input_file}"
-            },
-            {
-                "placeholder": "Output filename (e.g., results.txt)",
-                "variable": "{output_file}"
-            }
-        ]
+		"execDir": "<workspace>",
+		"scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No input_filename provided')\\n    sys.exit(1)\\n\\ninput_filename = sys.argv[1]\\noutput_filename = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {input_filename}')\\nprint(f'Output will be saved to: {output_filename}')\\n\\nif not os.path.exists(input_filename):\\n    print(f'Error: File {input_filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(input_filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_filename, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_filename}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
+		"scriptFile": "process_data.py",
+		"description": "Python script that reads a file and generates statistics with custom input and output filenames",
+		"inputs": [
+			{
+				"placeholder": "Input filename (e.g., data.txt)",
+				"variable": "{input_file}"
+			},
+			{
+				"placeholder": "Output filename (e.g., results.txt)",
+				"variable": "{output_file}"
+			}
+		]
     }
 ]
 
@@ -638,7 +639,7 @@ WRONG FORMAT (DO NOT DO THIS):
 	{
 		"name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
-        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script		❌ scriptFile missing
+        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script   	  ❌ don't use {env} placeholder inside scriptContent instead store input argument in appropriate variable at the starting of the script	    ❌ scriptFile missing
         "description": "Builds project and deploys to specified environment with error checking",		
         "inputs": [
             {
@@ -675,6 +676,7 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 			buttons.forEach(b => {
 				if (b.scriptContent?.trim().length) {
 					b.cmd = '';
+					b.execDir = '<workspace>';
 				}
 				else {
 					b.scriptContent = undefined;
@@ -825,6 +827,7 @@ Provide:
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
 4. If the command needs user input, include input fields with placeholders (use '{variableName}' format, put quotes around variable in cmd/scriptContent to support spaces)
+5. If script requires any user input as arguments then definitely add '{variableName}' for taking inputs
 
 Existing Buttons to Check (for duplication avoidance):
 ${existingButtonsInfo}
@@ -873,18 +876,23 @@ COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
 
 WITH INPUT FIELDS - SCRIPT:
 {
-    "name": "🚀 Deploy to Environment",
+	"name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
-    "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
+	"scriptContent": "if [ -z \"$1\" ]; then\\n  echo \"Error: Environment not specified\"\\n  exit 1\\nfi\\nENV=\"$1\"\\necho \"Deploying to $ENV\"\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:$ENV\\nelse\\n  echo \"Build failed, aborting deployment\"\\n  exit 1\\nfi",
 	"scriptFile": "deploy_to_env.sh",
-    "description": "Builds and deploys to specified environment with error checking",
-    "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
+	"description": "Builds project and deploys to specified environment with error checking",
+	"inputs": [
+		{
+			"placeholder": "Environment (dev/staging/prod)",
+			"variable": "{env}"
+		}
+	]
 }
 
 {
 	"name": "🐍 Process Data with Python",
 	"execDir": "<workspace>",
-	"scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No filename provided')\\n    sys.exit(1)\\n\\nfilename = sys.argv[1]\\noutput_file = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {filename}')\\nprint(f'Output will be saved to: {output_file}')\\n\\nif not os.path.exists(filename):\\n    print(f'Error: File {filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_file, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_file}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
+	"scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No input_filename provided')\\n    sys.exit(1)\\n\\ninput_filename = sys.argv[1]\\noutput_filename = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {input_filename}')\\nprint(f'Output will be saved to: {output_filename}')\\n\\nif not os.path.exists(input_filename):\\n    print(f'Error: File {input_filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(input_filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_filename, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_filename}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
 	"scriptFile": "process_data.py",
 	"description": "Python script that reads a file and generates statistics with custom input and output filenames",
 	"inputs": [
@@ -911,7 +919,7 @@ WRONG FORMAT - SCRIPT
 {
 	"name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
-	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script			❌ scriptFile missing
+	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script   	  ❌ don't use {env} placeholder inside scriptContent instead store input argument in appropriate variable at the starting of the script	    ❌ scriptFile missing
 	"description": "Builds project and deploys to specified environment with error checking",		
 	"inputs": [
 		{
@@ -956,6 +964,7 @@ Only respond with the JSON object, no additional text.`;
 					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
 					if (button.scriptContent?.trim().length) {
 						button.cmd = '';
+						button.execDir = '<workspace>';
 					}
 					else {
 						button.scriptContent = undefined;

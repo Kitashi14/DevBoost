@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { AIProvider } from './aiProvider';
 import { AIRequest, AIResponse, AIModule } from './types';
+import { OllamaProvider } from './providers';
 
 /**
  * Simplified configuration structure
@@ -202,6 +203,30 @@ export class AIProviderManager {
             const selectedProvider = available.find(p => p.name === selected.label);
 
             if (selectedProvider) {
+
+                // if if selected provider is ollama, prompt for port number
+                if(selectedProvider.id === 'ollama') {
+                    console.warn("ollamba port:", (selectedProvider as OllamaProvider).port);
+                    const portInput = await vscode.window.showInputBox({
+                        prompt: 'Enter the port number for Ollama (default is 11434)',
+                        placeHolder: (selectedProvider as OllamaProvider).port.toString(),
+                        value: (selectedProvider as OllamaProvider).port.toString(),
+                        validateInput: (value) => {
+                            const port = Number(value);
+                            if (isNaN(port) || port <= 0 || port > 65535) {
+                                return 'Please enter a valid port number between 1 and 65535';
+                            }
+                            return null;
+                        }
+                    });
+
+                    if (portInput) {
+                        const port = Number(portInput);
+                        (selectedProvider as OllamaProvider).port = port; // Cast to any to set port
+                        this.context.secrets.store(`devboost.${selectedProvider.id}.port`, port.toString());
+                    }
+                }
+
                 // Try to select a model if provider supports it
                 const modelId = await this.selectModelForProvider(selectedProvider, module);
 
@@ -310,6 +335,28 @@ export class AIProviderManager {
 
         const provider = selected.provider;
 
+        // if if selected provider is ollama, prompt for port number
+        if(provider.id === 'ollama') {
+            const portInput = await vscode.window.showInputBox({
+                prompt: 'Enter the port number for Ollama (default is 11434)',
+                placeHolder: (provider as OllamaProvider).port.toString(),
+                value: (provider as OllamaProvider).port.toString(),
+                validateInput: (value) => {
+                    const port = Number(value);
+                    if (isNaN(port) || port <= 0 || port > 65535) {
+                        return 'Please enter a valid port number between 1 and 65535';
+                    }
+                    return null;
+                }
+            });
+
+            if (portInput) {
+                const port = Number(portInput);
+                (provider as OllamaProvider).port = port; // Cast to any to set port
+                this.context.secrets.store(`devboost.${provider.id}.port`, port.toString());
+            }
+        }
+
         // If provider requires API key, prompt for it
         if (provider.requiresApiKey) {
             const apiKey = await vscode.window.showInputBox({
@@ -369,14 +416,6 @@ export class AIProviderManager {
                 await this.saveConfig();
             }
             return undefined
-        }
-
-        // Test connection
-        const connected = await provider.testConnection();
-        if (!connected) {
-            vscode.window.showErrorMessage(`Failed to connect to ${provider.name}. ${ provider.requiresApiKey ? "Reset API key if needed." : ""}`);
-            await provider.removeApiKey();
-            return undefined;
         }
 
         this.activeProviders.set(module, { providerId, modelId });

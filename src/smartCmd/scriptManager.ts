@@ -269,24 +269,13 @@ export function createScriptContent(
 		//remove first line from processedCommands
 		processedCommands = processedCommands.split('\n').slice(1).join('\n');
 	}
-	if (inputs && inputs.length > 0) {
-		inputs.forEach((input, index) => {
-			const argNum = index + 1;
-			const placeholder = input.variable; // e.g., {username}
-			const argReference = isWindows ? `%${argNum}` : `$${argNum}`;
-			
-			// Replace all occurrences of the placeholder with the argument reference
-			const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-			processedCommands = processedCommands.replace(regex, argReference);
-		});
-	}
 	let content = '';
 	
 	// Add shebang based on file extension
 	if (ext === '.sh') {
 		content = '#!/bin/bash\n';
 		if (description) {
-			content += `REM Description: ${description}\n`;
+			content += `# Description: ${description}\n`;
 		}
 	} else if (ext === '.py') {
 		content = '#!/usr/bin/env python3\n';
@@ -308,7 +297,7 @@ export function createScriptContent(
 		if (description) {
 			content += `# Description: ${description}\n`;
 		}
-	} else if (ext === '.bat' || ext === '.cmd') {
+	} else if (isWindows) {
 		content = '@echo off\n';
 		if (description) {
 			content += `REM Description: ${description}\n`;
@@ -320,7 +309,7 @@ export function createScriptContent(
 	}
 	
 
-	if (ext === '.bat' || ext === '.cmd') {
+	if (isWindows) {
 		
 		// Add input arguments documentation
 		if (inputs && inputs.length > 0) {

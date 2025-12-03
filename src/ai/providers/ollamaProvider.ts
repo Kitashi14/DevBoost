@@ -10,13 +10,14 @@ export class OllamaProvider extends BaseAIProvider {
     readonly name = 'Ollama (Local)';
     readonly requiresApiKey = false;
 
-    private endpoint = 'http://localhost:11434';
+    private endpoint = 'http://localhost:';
     private defaultModel = 'gemma3:4b';
+    public port: number = 11434;
 
     async isAvailable(): Promise<ProviderAvailability> {
         try {
             // Check if Ollama is running
-            const response = await fetch(`${this.endpoint}/api/tags`);
+            const response = await fetch(`${this.endpoint}${this.port}/api/tags`);
 
             if (!response.ok) {
                 return {
@@ -45,7 +46,7 @@ export class OllamaProvider extends BaseAIProvider {
 
     async listModels(): Promise<AIModel[]> {
         try {
-            const response = await fetch(`${this.endpoint}/api/tags`);
+            const response = await fetch(`${this.endpoint}${this.port}/api/tags`);
             const data = await response.json() as { models?: any[] };
 
             if (!data.models || data.models.length === 0) {
@@ -66,7 +67,7 @@ export class OllamaProvider extends BaseAIProvider {
 
     async getRecommendedModel(task: 'code' | 'text'): Promise<AIModel | null> {
         try {
-            const response = await fetch(`${this.endpoint}/api/tags`);
+            const response = await fetch(`${this.endpoint}${this.port}/api/tags`);
             const data = await response.json() as { models?: any[] };
 
             if (!data.models || data.models.length === 0) {
@@ -107,7 +108,7 @@ export class OllamaProvider extends BaseAIProvider {
             const model = await this.getRecommendedModel('code');
             const modelName = request.modelId || model?.id || this.defaultModel;
 
-            const response = await fetch(`${this.endpoint}/api/generate`, {
+            const response = await fetch(`${this.endpoint}${this.port}/api/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

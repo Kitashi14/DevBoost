@@ -1,9 +1,10 @@
 {
   "name": "devboostextension",
   "displayName": "DevBoost",
-  "description": "Command Buttons and Prompt Enhancer powered by AI to boost your productivity with GitHub Copilot.",
+  "description": "Boost your productivity through AI-driven tools.",
   "version": "0.7.3",
   "publisher": "DevBoost",
+  "icon": "images/devboost.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Kitashi14/DevBoost"

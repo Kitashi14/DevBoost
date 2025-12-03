@@ -1,8 +1,10 @@
 # DevBoost
+DevBoost is a Visual Studio Code extension designed to supercharge developer productivity with AI-powered  tools.
 
-Create interactive buttons that execute specific command chains or script files. Enhance any prompt or text with one click or provide more context for detailed enhancement.
+## SmartCmd
 
-## SmartCmd Features
+![SmartCmd Demo](images/devboost1.gif)
+
 
 - **Automation Buttons**
   - Create one-click buttons for your most-used commands
@@ -18,11 +20,14 @@ Create interactive buttons that execute specific command chains or script files.
   - Review, edit, and approve all AI suggestions before saving
   - AI handles platform-specific command syntax automatically
 
+  ![Button Creation Demo](images/devboost2.gif)
+
 - **Manual Button Creation**
   - Create buttons without AI assistance for full control
   - Define button name, command, execution directory, and description
   - Add input placeholders for dynamic values at execution time
   - Choose between workspace-only or global availability
+  
 
 - **Script Support**
   - Generate and run multi-step scripts from a single button
@@ -38,12 +43,16 @@ Create interactive buttons that execute specific command chains or script files.
   - View button commands and descriptions in tooltips
   - Open and edit button configuration files directly
 
+  ![Bulk Edit Demo](images/devboost3.gif)
+
 - **Cross-Platform Compatibility**
   - Works seamlessly on Windows, macOS, and Linux
   - Adapts commands and scripts to your shell environment (bash, zsh, PowerShell, cmd)
   - Platform-aware command generation
 
-## Prompt Enhancer Features
+## Prompt Enhancer
+
+![Prompt Enhancer Demo](images/devboost4.gif)
 
 - **Quick Enhance**
   - One-click enhancement from clipboard text
