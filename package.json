@@ -1,15 +1,16 @@
 {
   "name": "devboostextension",
   "displayName": "DevBoost",
-  "description": "Command Buttons and Prompt Enhancer powered by AI to boost your productivity with GitHub Copilot.",
-  "version": "0.7.3",
+  "description": "Boost your productivity through AI-driven tools.",
+  "version": "0.8.1",
   "publisher": "DevBoost",
+  "icon": "images/devboost.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Kitashi14/DevBoost"
   },
   "engines": {
-    "vscode": "^1.105.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "AI",
@@ -18,12 +19,16 @@
   "keywords": [
     "ai",
     "productivity",
-    "github copilot",
     "automation",
     "terminal",
     "command",
     "prompt",
-    "copilot"
+    "github copilot",
+    "copilot",
+    "ollama",
+    "anthropic",
+    "openai",
+    "gemini"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -142,6 +147,11 @@
         "command": "devboost.disableTrackingInCurrentSession",
         "title": "Disable Tracking Non-VScode Terminal Session",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "devboost.manageApiKeys",
+        "title": "Manage API Keys",
+        "icon": "$(key)"
       }
     ],
     "menus": {
@@ -177,6 +187,11 @@
           "group": "z_tracking@1"
         },
         {
+          "command": "devboost.manageApiKeys",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@0"
+        },
+        {
           "command": "devboost.enableTrackingInCurrentSession",
           "when": "view == devboost.smartCmdView",
           "group": "z_tracking@2"
@@ -190,6 +205,11 @@
           "command": "devboost.configurePromptEnhancerAIModel",
           "when": "view == devboost.promptEnhancerView",
           "group": "z_tracking@1"
+        },
+        {
+          "command": "devboost.manageApiKeys",
+          "when": "view == devboost.promptEnhancerView",
+          "group": "z_tracking@0"
         }
       ],
       "view/item/context": [
@@ -242,7 +262,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.9.2",
-    "@types/vscode": "^1.105.0",
+    "@types/vscode": "^1.99.0",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
     "@vscode/test-cli": "^0.0.11",

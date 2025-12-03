@@ -66,13 +66,6 @@ export interface EnhancementSuggestion {
  */
 export async function getPromptEnhancementSuggestions(prompt: string, globalStoragePath?: string): Promise<EnhancementSuggestion[]> {
 	try {
-		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
-		
-		if (!model) {
-			vscode.window.showInformationMessage('GitHub Copilot not available for prompt enhancement.');
-			return [];
-		}
-		
 		const enhancementPrompt = `Analyze this prompt and suggest specific improvements:
 
 PROMPT TO ANALYZE:
@@ -101,13 +94,8 @@ RESPOND WITH JSON ARRAY ONLY:
   }
 ]`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(enhancementPrompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('promptEnhancer', enhancementPrompt, globalStoragePath);
+		const fullResponse = response.text;
 
 		try {
 			// Clean up the response to extract JSON
@@ -125,7 +113,7 @@ RESPOND WITH JSON ARRAY ONLY:
 					originalPrompt: prompt,
 					suggestionsCount: filteredSuggestions.length,
 					rawResponseLength: fullResponse.length,
-					model: model.family
+					model: response.model
 				});
 				
 				return filteredSuggestions;
@@ -138,7 +126,7 @@ RESPOND WITH JSON ARRAY ONLY:
 				originalPrompt: prompt,
 				error: 'Parse error',
 				parseError: parseError instanceof Error ? parseError.message : String(parseError),
-				model: model.family
+				model: response.model
 			});
 		}
 
@@ -158,14 +146,7 @@ export async function applyEnhancements(
 	globalStoragePath?: string
 ): Promise<string> {
 	try {
-		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
-		
-		if (!model) {
-			vscode.window.showInformationMessage('GitHub Copilot not available for prompt enhancement.');
-			return originalPrompt;
-		}
-		
-		const enhancementDetails = selectedSuggestions.map(s => 
+		const enhancementDetails = selectedSuggestions.map(s =>
 			`- ${s.type.toUpperCase()}: ${s.suggestion}`
 		).join('\n');
 
@@ -181,13 +162,8 @@ Create an improved version of the prompt that incorporates these enhancements wh
 
 RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(applyPrompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let enhancedPrompt = '';
-		for await (const part of response.text) {
-			enhancedPrompt += part;
-		}
+		const response = await configManager.sendAIRequest('promptEnhancer', applyPrompt, globalStoragePath);
+		const enhancedPrompt = response.text;
 
 		const finalResult = enhancedPrompt.trim() || originalPrompt;
 		
@@ -198,7 +174,7 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
 			enhancementDetails,
 			enhancedPromptLength: finalResult.length,
 			wasEnhanced: finalResult !== originalPrompt,
-			model: model.family	
+			model: response.model
 		});
 
 		return finalResult;
@@ -223,13 +199,6 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO ADDITIONAL TEXT:`;
  */
 export async function generatePromptFromIntent(intent: string, domain?: string, globalStoragePath?: string): Promise<string> {
 	try {
-		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
-		
-		if (!model) {
-			vscode.window.showInformationMessage('GitHub Copilot not available for prompt generation.');
-			return intent;
-		}
-		
 		const domainContext = domain ? `\nDOMAIN CONTEXT: ${domain}` : '';
 		
 		const generationPrompt = `Create a well-structured, effective prompt based on this user intent:
@@ -245,13 +214,8 @@ Create a clear, specific, and actionable prompt that will get the best results f
 
 RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(generationPrompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let generatedPrompt = '';
-		for await (const part of response.text) {
-			generatedPrompt += part;
-		}
+		const response = await configManager.sendAIRequest('promptEnhancer', generationPrompt, globalStoragePath);
+		const generatedPrompt = response.text;
 
 		const finalResult = generatedPrompt.trim() || intent;
 		
@@ -262,7 +226,7 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
 			domainContext,
 			generatedPromptLength: finalResult.length,
 			wasGenerated: finalResult !== intent,
-			model: model.family
+			model: response.model
 		});
 
 		return finalResult;
@@ -287,12 +251,6 @@ RESPOND WITH ONLY THE GENERATED PROMPT - NO ADDITIONAL TEXT:`;
  */
 export async function quickEnhancePrompt(originalPrompt: string, globalStoragePath?: string): Promise<string | null> {
 	try {
-		const model = await configManager.getAIModel('promptEnhancer', globalStoragePath);
-		
-		if (!model) {
-			return null;
-		}
-		
 		const quickEnhancePrompt = `Quickly improve this prompt to make it clearer, more specific, and more effective. 
 Keep the original intent but enhance clarity, add helpful context, and improve structure.
 
@@ -309,13 +267,8 @@ RULES:
 
 RESPOND WITH ONLY THE ENHANCED PROMPT - NO EXPLANATION:`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(quickEnhancePrompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let enhancedPrompt = '';
-		for await (const part of response.text) {
-			enhancedPrompt += part;
-		}
+		const response = await configManager.sendAIRequest('promptEnhancer', quickEnhancePrompt, globalStoragePath);
+		const enhancedPrompt = response.text;
 
 		const finalResult = enhancedPrompt.trim() || originalPrompt;
 		
@@ -324,7 +277,7 @@ RESPOND WITH ONLY THE ENHANCED PROMPT - NO EXPLANATION:`;
 			originalPrompt,
 			enhancedPromptLength: finalResult.length,
 			wasEnhanced: finalResult !== originalPrompt,
-			model: model.family
+			model: response.model
 		});
 
 		return finalResult;

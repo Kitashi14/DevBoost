@@ -1228,7 +1228,7 @@ export class BulkEditPanel {
             
             let msgText = 'You are about to apply the following changes:\\n\\n';
             if (hasReorder) {
-                msgText += \`• Reorder all buttons\\n\`;
+                msgText += \`• Reorder buttons\\n\`;
             }
             if (updateCount > 0) {
                 msgText += \`• Update \${updateCount} button(s)\\n\`;

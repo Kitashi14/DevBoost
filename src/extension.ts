@@ -1,5 +1,3 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as activityLogging from './activityLogging';
@@ -7,10 +5,19 @@ import * as shellHooks from './shellHooks';
 import { activateSmartCmd } from './smartCmd/activateExt';
 import { registerPromptEnhancerCommands } from './promptEnhancer/promptEnhancer';
 import { PromptEnhancerTreeProvider } from './promptEnhancer/treeProvider';
+import { initializeAISystem } from './ai';
+import { AIProviderManager } from './ai/providerManager';
 
 // Global variables
 let cleanupTimer: NodeJS.Timeout | undefined;
+let aiProviderManager: AIProviderManager | undefined;
 
+/**
+ * Get the AI provider manager instance
+ */
+export function getAIProviderManager(): AIProviderManager | undefined {
+	return aiProviderManager;
+}
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -24,6 +31,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Initialize global extension paths (in extension's global storage)
 	const globalStoragePath = context.globalStorageUri.fsPath;
+
+	// Initialize AI provider system
+	aiProviderManager = await initializeAISystem(context, globalStoragePath);
+	context.subscriptions.push({
+		dispose: () => {
+			if (aiProviderManager) {
+				aiProviderManager.dispose();
+			}
+		}
+	});
 
 	// // Activate SmartCmd tool
 	await activateSmartCmd(context, globalStoragePath);
@@ -54,6 +71,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('devboost.disableTrackingInCurrentSession', async () => {
 			await shellHooks.disableTrackingInCurrentSession();
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('devboost.manageApiKeys', async () => {
+			if (aiProviderManager) {
+				await aiProviderManager.manageApiKeys();
+			} else {
+				vscode.window.showErrorMessage('AI Provider Manager is not initialized.');
+			}
 		})
 	);
 
