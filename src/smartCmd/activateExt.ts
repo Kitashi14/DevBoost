@@ -54,7 +54,7 @@ export async function activateSmartCmd(
 				await handlers.createCustomButton(globalStoragePath, buttonsProvider, 'Global');
 			}
 			else {
-				await handlers.createCustomButton(globalStoragePath, buttonsProvider, 'Workspace', );
+				await handlers.createCustomButton(globalStoragePath, buttonsProvider, 'Workspace');
 			}
 		}
 		else {
@@ -117,7 +117,7 @@ export async function activateSmartCmd(
 	});
 
 	const configureSmartCmdAIModelDisposable = vscode.commands.registerCommand('devboost.configureSmartCmdAIModel', async () => {
-		await configManager.configureAIModel('smartCmd', globalStoragePath);
+		await configManager.configureAI('smartCmd');
 	});
 
 	const bulkEditButtonsDisposable = vscode.commands.registerCommand('devboost.bulkEditButtons', async () => {

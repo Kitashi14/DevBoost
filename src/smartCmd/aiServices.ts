@@ -88,13 +88,6 @@ export async function enhancePrompt(
 	globalStoragePath?: string
 ): Promise<string | null> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			console.log('No AI model available for prompt enhancement');
-			return null;
-		}
-
 		const { platform, shell } = getSystemInfo();
 
 		const prompt = `You are an expert at helping developers create precise command descriptions for automation buttons.
@@ -145,19 +138,14 @@ IMPORTANT:
 
 Respond with ONLY the enhanced description text, nothing else.`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt, globalStoragePath);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('enhancePrompt', prompt, fullResponse, {
 			originalPrompt,
 			scope,
-			model: model.family
+			model: response.model
 		});
 
 		return fullResponse.trim();
@@ -215,12 +203,6 @@ export async function checkDuplicateButton(
 
 	// Use AI for semantic similarity check
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			return null;
-		}
-
 		const existingButtonsInfo = buttonsToCheck.map((b, i) => {
 			const desc = b.description || 'N/A';
 			const user_prompt = b.user_prompt || 'N/A';
@@ -266,22 +248,17 @@ Eg:
 
 If it's unique, respond with only "UNIQUE".`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+		console.log('AI duplicate detection prompt:', prompt);
 
-        console.log('AI duplicate detection prompt:', prompt);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('checkDuplicateButton', prompt, fullResponse, {
 			newButton: { name: newButton.name, execDir: newButton.execDir, cmd: newButton.cmd },
 			targetScope,
 			existingButtonsCount: buttonsToCheck.length,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('AI duplicate detection response:', fullResponse);
@@ -350,13 +327,6 @@ If it's unique, respond with only "UNIQUE".`;
  */
 export async function checkIfButtonIsGlobalSafe(button: smartCmdButton, globalStoragePath?: string): Promise<{ isSafe: boolean; reason?: string }> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			console.log('DevBoost: No AI model available for global safety check');
-			return { isSafe: true };
-		}
-
 		const prompt = `Analyze this VS Code button command to determine if it's safe to use globally across all projects, or if it's workspace-specific.
 
 Button Details:
@@ -396,20 +366,16 @@ SAFE
 {"status": "UNSAFE", "reason": "Uses relative path ./src which assumes specific project structure"}
 {"status": "UNSAFE", "reason": "Runs npm script 'deploy-prod' which may not exist in other projects"}`;
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-        console.log('DevBoost: Global safety check prompt:', prompt);
+		console.log('DevBoost: Global safety check prompt:', prompt);
 
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('checkIfButtonIsGlobalSafe', prompt, fullResponse, {
 			button: { name: button.name, execDir: button.execDir, cmd: button.cmd },
 			currentScope: button.scope,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('DevBoost: Global safety check response:', fullResponse);
@@ -451,12 +417,6 @@ export async function getAISuggestions(
 	globalStoragePath?: string
 ): Promise<smartCmdButton[]> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			vscode.window.showWarningMessage('No AI model configured. Using fallback suggestions.');
-			return getFallbackSuggestions([]);
-		}
 		const { platform, shell } = getSystemInfo();
 		let workspaceName = 'N/A';
 		let workspacePath = 'N/A';
@@ -472,9 +432,9 @@ export async function getAISuggestions(
 			return `${i + 1}. Name: "${b.name}", Exec Dir: "${b.execDir}", Command: "${b.cmd}", Description: "${desc}", User Prompt: "${user_prompt}", Scope: ${b.scope}`;
 		}).join('\n');
 
-	
-	const prompt = 
-	`You are an elite DevOps automation expert creating intelligent command buttons for a developer's specific workflow.
+
+		const prompt =
+			`You are an elite DevOps automation expert creating intelligent command buttons for a developer's specific workflow.
 
 🖥️  SYSTEM ENVIRONMENT:
 - OS: ${platform} | Shell: ${shell}
@@ -548,6 +508,7 @@ SIMPLE COMMAND CHAIN:
 COMPLEX SCRIPT:
 • If you see: "cd frontend && npm install" → "cd ../backend && npm install" → "cd .. && docker-compose up"
   Use scriptContent with proper directory management and error handling
+• If script requires any user input as arguments then definitely add '{variableName}' for taking inputs
 
 🔧 ${platform} COMMAND REQUIREMENTS:
 ${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed\n• Scripts: Use batch script syntax (.bat)' : ''}
@@ -637,7 +598,7 @@ WITH INPUT FIELDS - SCRIPT FORMAT:
     {
         "name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
-        "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi",
+        "scriptContent": "if [ -z \"$1\" ]; then\\n  echo \"Error: Environment not specified\"\\n  exit 1\\nfi\\nENV=\"$1\"\\necho \"Deploying to $ENV\"\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:$ENV\\nelse\\n  echo \"Build failed, aborting deployment\"\\n  exit 1\\nfi",
 		"scriptFile": "deploy_to_env.sh",
         "description": "Builds project and deploys to specified environment with error checking",
         "inputs": [
@@ -649,20 +610,20 @@ WITH INPUT FIELDS - SCRIPT FORMAT:
     },
     {
         "name": "🐍 Process Data with Python",
-        "execDir": "<workspace>",
-        "scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No filename provided')\\n    sys.exit(1)\\n\\nfilename = sys.argv[1]\\noutput_file = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {filename}')\\nprint(f'Output will be saved to: {output_file}')\\n\\nif not os.path.exists(filename):\\n    print(f'Error: File {filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_file, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_file}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
-        "scriptFile": "process_data.py",
-        "description": "Python script that reads a file and generates statistics with custom input and output filenames",
-        "inputs": [
-            {
-                "placeholder": "Input filename (e.g., data.txt)",
-                "variable": "{input_file}"
-            },
-            {
-                "placeholder": "Output filename (e.g., results.txt)",
-                "variable": "{output_file}"
-            }
-        ]
+		"execDir": "<workspace>",
+		"scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No input_filename provided')\\n    sys.exit(1)\\n\\ninput_filename = sys.argv[1]\\noutput_filename = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {input_filename}')\\nprint(f'Output will be saved to: {output_filename}')\\n\\nif not os.path.exists(input_filename):\\n    print(f'Error: File {input_filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(input_filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_filename, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_filename}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
+		"scriptFile": "process_data.py",
+		"description": "Python script that reads a file and generates statistics with custom input and output filenames",
+		"inputs": [
+			{
+				"placeholder": "Input filename (e.g., data.txt)",
+				"variable": "{input_file}"
+			},
+			{
+				"placeholder": "Output filename (e.g., results.txt)",
+				"variable": "{output_file}"
+			}
+		]
     }
 ]
 
@@ -678,7 +639,7 @@ WRONG FORMAT (DO NOT DO THIS):
 	{
 		"name": "🚀 Deploy to Environment",
         "execDir": "<workspace>",
-        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script		❌ scriptFile missing
+        "scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script   	  ❌ don't use {env} placeholder inside scriptContent instead store input argument in appropriate variable at the starting of the script	    ❌ scriptFile missing
         "description": "Builds project and deploys to specified environment with error checking",		
         "inputs": [
             {
@@ -693,24 +654,16 @@ Analyze the sequential logs carefully and generate 3-5 buttons that automate the
 Choose between cmd and scriptContent based on workflow complexity.
 RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 
-		// Log prompt for development
-		
-
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('AI button suggestions prompt:', prompt);
-		
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		await logPromptToFile('getAISuggestions', prompt, fullResponse, {
 			platform,
 			shell,
 			recentLogsCount: optimizedLog.recentLogs.length,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('AI response for button suggestions:', fullResponse);
@@ -723,12 +676,13 @@ RESPOND WITH JSON ARRAY ONLY - NO OTHER TEXT:`;
 			buttons.forEach(b => {
 				if (b.scriptContent?.trim().length) {
 					b.cmd = '';
+					b.execDir = '<workspace>';
 				}
 				else {
 					b.scriptContent = undefined;
 					b.scriptFile = undefined;
 				}
-				b.modelUsed = model.family;
+				b.modelUsed = response.model;
 			});
 			return buttons.filter(b => b.name && (b.cmd || b.scriptContent));
 		}
@@ -759,12 +713,6 @@ export async function getCustomButtonSuggestion(
 	existingButtons: smartCmdButton[] = []
 ): Promise<smartCmdButton | null> {
 	try {
-		const model = await configManager.getAIModel('smartCmd', globalStoragePath);
-		
-		if (!model) {
-			vscode.window.showInformationMessage('No AI model configured. Please enter button details manually.');
-			return null;
-		}
 		const { platform, shell } = getSystemInfo();
 
 		const buttonsToCheck = scope === 'global'
@@ -879,6 +827,7 @@ Provide:
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
 4. If the command needs user input, include input fields with placeholders (use '{variableName}' format, put quotes around variable in cmd/scriptContent to support spaces)
+5. If script requires any user input as arguments then definitely add '{variableName}' for taking inputs
 
 Existing Buttons to Check (for duplication avoidance):
 ${existingButtonsInfo}
@@ -927,18 +876,23 @@ COMPLEX SCRIPT FORMAT (use scriptContent for multi-step workflows):
 
 WITH INPUT FIELDS - SCRIPT:
 {
-    "name": "🚀 Deploy to Environment",
+	"name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
-    "scriptContent": "echo Deploying to {env}\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed\\n  exit 1\\nfi",
+	"scriptContent": "if [ -z \"$1\" ]; then\\n  echo \"Error: Environment not specified\"\\n  exit 1\\nfi\\nENV=\"$1\"\\necho \"Deploying to $ENV\"\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:$ENV\\nelse\\n  echo \"Build failed, aborting deployment\"\\n  exit 1\\nfi",
 	"scriptFile": "deploy_to_env.sh",
-    "description": "Builds and deploys to specified environment with error checking",
-    "inputs": [{"placeholder": "Environment (dev/staging/prod)", "variable": "{env}"}]
+	"description": "Builds project and deploys to specified environment with error checking",
+	"inputs": [
+		{
+			"placeholder": "Environment (dev/staging/prod)",
+			"variable": "{env}"
+		}
+	]
 }
 
 {
 	"name": "🐍 Process Data with Python",
 	"execDir": "<workspace>",
-	"scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No filename provided')\\n    sys.exit(1)\\n\\nfilename = sys.argv[1]\\noutput_file = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {filename}')\\nprint(f'Output will be saved to: {output_file}')\\n\\nif not os.path.exists(filename):\\n    print(f'Error: File {filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_file, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_file}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
+	"scriptContent": "import sys\\nimport os\\n\\nif len(sys.argv) < 2:\\n    print('Error: No input_filename provided')\\n    sys.exit(1)\\n\\ninput_filename = sys.argv[1]\\noutput_filename = sys.argv[2] if len(sys.argv) > 2 else 'output.txt'\\n\\nprint(f'Processing file: {input_filename}')\\nprint(f'Output will be saved to: {output_filename}')\\n\\nif not os.path.exists(input_filename):\\n    print(f'Error: File {input_filename} not found')\\n    sys.exit(1)\\n\\ntry:\\n    with open(input_filename, 'r') as f:\\n        data = f.read()\\n        lines = len(data.splitlines())\\n        words = len(data.split())\\n        chars = len(data)\\n    \\n    result = f'File Statistics:\\\\nLines: {lines}\\\\nWords: {words}\\\\nCharacters: {chars}\\\\n'\\n    \\n    with open(output_filename, 'w') as f:\\n        f.write(result)\\n    \\n    print(result)\\n    print(f'Results saved to {output_filename}')\\nexcept Exception as e:\\n    print(f'Error processing file: {e}')\\n    sys.exit(1)",
 	"scriptFile": "process_data.py",
 	"description": "Python script that reads a file and generates statistics with custom input and output filenames",
 	"inputs": [
@@ -965,7 +919,7 @@ WRONG FORMAT - SCRIPT
 {
 	"name": "🚀 Deploy to Environment",
 	"execDir": "<workspace>",
-	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script			❌ scriptFile missing
+	"scriptContent": "echo "\Deploying to {env} at <workspace>"\\\nnpm run build\\nif [ $? -eq 0 ]; then\\n  npm run deploy:{env}\\nelse\\n  echo Build failed, aborting deployment\\n  exit 1\\nfi", ❌ <workspace> can only be used in execDir/cmd field, get the workspace from pwd or other way to use in script   	  ❌ don't use {env} placeholder inside scriptContent instead store input argument in appropriate variable at the starting of the script	    ❌ scriptFile missing
 	"description": "Builds project and deploys to specified environment with error checking",		
 	"inputs": [
 		{
@@ -978,15 +932,10 @@ WRONG FORMAT - SCRIPT
 Only respond with the JSON object, no additional text.`;
 
 
-		const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 		console.log('Custom button prompt:', prompt);
 
-		const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-		let fullResponse = '';
-		for await (const part of response.text) {
-			fullResponse += part;
-		}
+		const response = await configManager.sendAIRequest('smartCmd', prompt);
+		const fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('getCustomButtonSuggestion', prompt, fullResponse, {
@@ -995,7 +944,7 @@ Only respond with the JSON object, no additional text.`;
 			platform,
 			shell,
 			workspaceName: vscode.workspace.workspaceFolders?.[0]?.name,
-			model: model.family
+			model: response.model
 		});
 
 		console.log('AI response for custom button:', fullResponse);
@@ -1013,14 +962,15 @@ Only respond with the JSON object, no additional text.`;
 				if (button.name && (button.cmd || button.scriptContent) && button.description) {
 					button.user_prompt = description;
 					button.execDir = button.execDir && button.execDir.trim() !== '' ? button.execDir : '.';
-					if(button.scriptContent?.trim().length) {
+					if (button.scriptContent?.trim().length) {
 						button.cmd = '';
+						button.execDir = '<workspace>';
 					}
 					else {
 						button.scriptContent = undefined;
 						button.scriptFile = undefined;
 					}
-					button.modelUsed = model.family;
+					button.modelUsed = response.model;
 					console.log('Successfully parsed button:', button);
 					return button;
 				}

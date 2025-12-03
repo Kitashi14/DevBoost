@@ -137,6 +137,10 @@ export async function quickEnhanceFromClipboard(globalStoragePath: string): Prom
 			
 			// Use AI to quickly enhance the prompt
 			const enhanced = await aiServices.quickEnhancePrompt(clipboardText.trim(), globalStoragePath);
+            // remove quotation marks from start and end if present
+            if (enhanced) {
+                return enhanced.replace(/^["']|["']$/g, '');
+            }
 			return enhanced;
 		});
 
@@ -311,6 +315,7 @@ function getPromptEnhancerHtml(): string {
             border-radius: 4px;
             font-family: inherit;
             resize: vertical;
+            box-sizing: border-box;
         }
         input[type="text"] {
             width: 100%;
@@ -320,6 +325,7 @@ function getPromptEnhancerHtml(): string {
             color: var(--vscode-input-foreground);
             border-radius: 4px;
             font-family: inherit;
+            box-sizing: border-box;
         }
         button {
             background-color: var(--vscode-button-background);
@@ -445,7 +451,6 @@ function getPromptEnhancerHtml(): string {
                 <h2>✅ Enhanced Prompt</h2>
                 <div id="enhancedContent"></div>
                 <button onclick="copyEnhanced()">Copy Enhanced Prompt</button>
-                <button onclick="useEnhanced()" class="secondary">Use This Prompt</button>
             </div>
         </div>
 
@@ -495,21 +500,11 @@ function getPromptEnhancerHtml(): string {
         }
 
         function copyEnhanced() {
-            const enhanced = document.querySelector('#enhancedContent textarea');
+            const enhanced = document.querySelector('#enhancedContent textarea:not([readonly])');
             if (enhanced) {
                 vscode.postMessage({
                     command: 'copyToClipboard',
                     text: enhanced.value
-                });
-            }
-        }
-
-        function useEnhanced() {
-            const enhanced = document.querySelector('#enhancedContent textarea');
-            if (enhanced) {
-                vscode.postMessage({
-                    command: 'useEnhanced',
-                    prompt: enhanced.value
                 });
             }
         }
