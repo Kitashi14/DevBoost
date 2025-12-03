@@ -5,11 +5,10 @@
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.105.0%2B-blue.svg)](https://code.visualstudio.com/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-> AI-powered VS Code extension for creating custom command buttons and enhancing prompts.
 
-**DevBoost** automates repetitive development tasks by learning from your workflow patterns and creating one-click command buttons. It also helps you write better AI prompts with built-in enhancement tools.
+VS Code extension designed to supercharge developer productivity with AI-powered tools
 
-## ✨ Features
+## ✨ Current Features
 
 ### 🤖 SmartCmd - Custom Command Buttons
 
