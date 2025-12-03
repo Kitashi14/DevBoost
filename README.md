@@ -3,7 +3,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
 
 ## SmartCmd
 
-![SmartCmd Demo](images/devboost1.gif)
+![SmartCmd Demo](https://raw.githubusercontent.com/Kitashi14/DevBoost/refs/heads/release_beta/images/devboost1.gif)
 
 
 - **Automation Buttons**
@@ -20,7 +20,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
   - Review, edit, and approve all AI suggestions before saving
   - AI handles platform-specific command syntax automatically
 
-  ![Button Creation Demo](images/devboost2.gif)
+  ![Button Creation Demo](https://raw.githubusercontent.com/Kitashi14/DevBoost/refs/heads/release_beta/images/devboost2.gif)
 
 - **Manual Button Creation**
   - Create buttons without AI assistance for full control
@@ -43,7 +43,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
   - View button commands and descriptions in tooltips
   - Open and edit button configuration files directly
 
-  ![Bulk Edit Demo](images/devboost3.gif)
+  ![Bulk Edit Demo](https://raw.githubusercontent.com/Kitashi14/DevBoost/refs/heads/release_beta/images/devboost3.gif)
 
 - **Cross-Platform Compatibility**
   - Works seamlessly on Windows, macOS, and Linux
@@ -52,7 +52,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
 
 ## Prompt Enhancer
 
-![Prompt Enhancer Demo](images/devboost4.gif)
+![Prompt Enhancer Demo](https://raw.githubusercontent.com/Kitashi14/DevBoost/refs/heads/release_beta/images/devboost4.gif)
 
 - **Quick Enhance**
   - One-click enhancement from clipboard text

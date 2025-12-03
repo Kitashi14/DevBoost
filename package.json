@@ -2,7 +2,7 @@
   "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "Boost your productivity through AI-driven tools.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "DevBoost",
   "icon": "images/devboost.png",
   "repository": {
@@ -19,12 +19,16 @@
   "keywords": [
     "ai",
     "productivity",
-    "github copilot",
     "automation",
     "terminal",
     "command",
     "prompt",
-    "copilot"
+    "github copilot",
+    "copilot",
+    "ollama",
+    "anthropic",
+    "openai",
+    "gemini"
   ],
   "activationEvents": [
     "onStartupFinished"
