@@ -188,9 +188,18 @@ async function loadExampleButtonsIfNeeded(
 					const scriptsDir = path.join(workspaceRoot, '.vscode', 'devBoost', 'scripts');
 					await fs.mkdir(scriptsDir, { recursive: true });
 					
-					const scriptPath = path.join(scriptsDir, examples.exampleScript.filename);
-					await fs.writeFile(scriptPath, examples.exampleScript.content, { encoding: 'utf-8' });
-					
+					// Determine script filename/content (prefer platform-specific example if provided)
+					let scriptFilename = examples.exampleScript.filename;
+					let scriptContent = examples.exampleScript.content;
+
+					if (process.platform === 'win32' && examples.exampleScriptWindows) {
+						scriptFilename = examples.exampleScriptWindows.filename;
+						scriptContent = examples.exampleScriptWindows.content;
+					}
+
+					const scriptPath = path.join(scriptsDir, scriptFilename);
+					await fs.writeFile(scriptPath, scriptContent, { encoding: 'utf-8' });
+
 					// Make script executable on Unix-like systems
 					if (process.platform !== 'win32') {
 						try {
@@ -199,7 +208,10 @@ async function loadExampleButtonsIfNeeded(
 							console.warn('DevBoost: Could not make example script executable:', chmodError);
 						}
 					}
-					
+
+					// Update the button's scriptFile to the platform-specific filename
+					scriptButton.scriptFile = scriptFilename;
+
 					// Generate command for the script button
 					const scriptCommand = scriptManager.generateScriptCommand(
 						scriptButton.scriptFile,

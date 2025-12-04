@@ -238,7 +238,7 @@ export function generateScriptCommand(
 	
 	// Append input variable placeholders if present
 	if (inputs && inputs.length > 0) {
-		const placeholders = inputs.map(input => `'${input.variable}'`).join(' ');
+		const placeholders = inputs.map(input => `"${input.variable}"`).join(' ');
 		command = `${command} ${placeholders}`;
 	}
 	
@@ -261,6 +261,15 @@ export function createScriptContent(
 	
 	// Replace input variable placeholders with positional argument references
 	let processedCommands = commands;
+
+	// If inputs are provided, substitute placeholder variables with positional args
+	if (isWindows && inputs && inputs.length > 0) {
+		// Safely convert any existing %1, %2 to %~1, %~2 without double-tilde
+		const TILDE_MARKER = '@@DEVBOOST_TILDE@@';
+		processedCommands = processedCommands.replace(/%~/g, TILDE_MARKER);
+		processedCommands = processedCommands.replace(/%([1-9][0-9]*)/g, '%~$1');
+		processedCommands = processedCommands.replace(new RegExp(TILDE_MARKER, 'g'), '%~');
+	}
 
 	// Check if script content is already processed (has shebang or @echo off)
 	const firstLine = processedCommands.split('\n')[0].trim();
