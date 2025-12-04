@@ -1,5 +1,5 @@
 # DevBoost
-DevBoost is a Visual Studio Code extension designed to supercharge developer productivity with AI-powered  tools.
+Supercharge developer productivity with multiple tools along with extra support of AI.
 
 ## SmartCmd
 
@@ -90,7 +90,7 @@ DevBoost is a Visual Studio Code extension designed to supercharge developer pro
 ## Notes
  1. Use extension's UI to manage buttons instead of editing related JSON files directly.
  2. Use 'Enable Tracking Non-VScode Terminal Session' feature under SmartCmd menu for tracking commands run in sessions like screen, tmux, ssh etc.
- 3. Configure different AI model for SmartCmd and Prompt Enhancer from their menu button.
+ 3. Configure your choice of AI provider (currently supports Copilot, Gemini, OpenAI, Anthropic and Ollama) and model for SmartCmd and Prompt Enhancer from their menu button.
 
 ## Feedback & Feature Requests
 
