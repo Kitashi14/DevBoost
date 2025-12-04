@@ -2,7 +2,7 @@
   "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "Boost your productivity through AI-driven tools.",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "publisher": "DevBoost",
   "icon": "images/devboost.png",
   "repository": {

@@ -1,5 +1,6 @@
 # DevBoost
-Supercharge developer productivity with multiple tools along with extra support of AI.
+
+Boost your development workflow with powerful productivity tools designed for modern developers. DevBoost combines intelligent automation, AI-powered features, and practical utilities to streamline your daily coding tasks.
 
 ## SmartCmd
 
