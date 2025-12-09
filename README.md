@@ -1,8 +1,8 @@
 # DevBoost
 
-[![Version](https://img.shields.io/badge/version-0.7.2-blue.svg)](https://open-vsx.org/extension/DevBoost/devboostextension)
+[![Version](https://img.shields.io/badge/version-0.8.4-blue.svg)](https://open-vsx.org/extension/DevBoost/devboostextension)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.105.0%2B-blue.svg)](https://code.visualstudio.com/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.99.0%2B-blue.svg)](https://code.visualstudio.com/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 
