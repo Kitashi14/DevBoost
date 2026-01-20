@@ -21,8 +21,10 @@ Create reusable command buttons for your frequent terminal operations:
 - **Manual Creation**: Create custom buttons with or without AI assistance  
 - **Script Support**: Generate multi-step shell scripts for complex workflows
 - **Scope Management**: Global buttons (all workspaces) or workspace-specific buttons
+- **Button Groups**: Organize buttons into collapsible groups for better organization
 - **Bulk Operations**: Edit, delete, or reorder multiple buttons at once with drag-and-drop
 - **Dynamic Inputs**: Add runtime prompts for flexible command execution
+- **Import/Export**: Share button configurations across workspaces or with team members via zip files
 
 ### 🔄 Prompt Enhancer
 
@@ -73,8 +75,13 @@ npm run compile
    - Choose **Global** or **Workspace** scope
    - Use AI assistance or create manually
    - Add command, name, and description
-3. **Execute**: Click any button to run its command
-4. **Manage**: Right-click buttons to edit, delete, or view scripts
+3. **Organize with Groups** (Optional):
+   - Create groups in workspace/global section 
+   - Name your group (e.g., "Git Commands", "Build Tasks")
+   - Right-click buttons → "Add to Group"
+4. **Execute**: Click any button to run its command
+5. **Manage**: Right-click buttons/groups to edit, delete, or view scripts
+6. **Share**: Export your commands to share with team or import from others
 
 ## Documentation
 
@@ -85,6 +92,10 @@ npm run compile
 - `DevBoost: Create AI Buttons` - Generate buttons from activity log
 - `DevBoost: Create Custom Button` - Manual or AI-assisted button creation
 - `DevBoost: Bulk Edit Buttons` - Multi-select operations and drag-drop reordering
+- `DevBoost: Create Button Group` - Organize buttons into collapsible groups
+- `DevBoost: Edit Groups` - Manage groups (rename, delete, reorder)
+- `DevBoost: Export SmartCmds` - Export buttons, groups, and scripts to a zip file
+- `DevBoost: Import SmartCmds` - Import commands from a zip file
 - `DevBoost: Configure AI Model` - Switch between AI providers (Copilot, OpenAI, Claude, Gemini, Ollama)
 - `DevBoost: Manage API Keys` - Store API keys securely for different providers
 
@@ -94,12 +105,27 @@ npm run compile
 - **Execution Directory**: Specify where commands run (e.g., `<workspace>`, `.`, or custom path)
 - **Scripts**: Complex workflows stored as executable shell scripts
 - **Cross-Platform**: Auto-detects OS for platform-specific commands
+- **Groups**: Right-click buttons to add/remove from groups, organize commands logically
 
 **Bulk Edit Panel** (`DevBoost: Bulk Edit Buttons`):
 - Drag-and-drop to reorder buttons (within same scope)
 - Multi-select with scope-level checkboxes
 - Bulk actions: Set execution directory, delete multiple buttons
 - Filter by type (scripts vs commands)
+
+**Groups Management** (`DevBoost: Edit Groups`):
+- Create collapsible groups to organize related buttons
+- Drag-and-drop to reorder groups and buttons within groups
+- Rename, delete groups with right-click context menu
+- Remove individual buttons from groups
+- Supports both workspace and global scopes
+
+**Import/Export** (`DevBoost: Export/Import SmartCmds`):
+- Export buttons, groups, and scripts to a shareable zip file
+- Choose scope: global, workspace, or both
+- Import with conflict resolution (skip, rename, or overwrite)
+- Automatically handles script dependencies
+- Share command sets across projects or with team members
 
 ### Prompt Enhancer Commands
 
@@ -110,13 +136,13 @@ npm run compile
 ### File Locations
 
 **Workspace Files** (`.vscode/devBoost/`):
-- `smartCmd.json` - Workspace button definitions
+- `smartCmd.json` - Workspace button definitions and groups
 - `scripts/` - Workspace-specific script files
 - `activity.log` - Development activity tracking (auto-cleanup enabled)
 - `ai_prompts_enhancer.log` - AI interaction logs for debugging, disabled in release version.
 
 **Global Files** (Extension Storage):
-- Global button definitions
+- Global button definitions and groups
 - Global script files
 - AI provider configuration
 - Encrypted API keys (when using external providers)
@@ -153,10 +179,12 @@ src/
 │   ├── aiServices.ts         # AI integration for SmartCmd
 │   ├── treeProvider.ts       # VS Code tree view provider
 │   ├── scriptManager.ts      # Script generation & storage
+│   ├── importExport.ts       # Import/export functionality
 │   └── view/                 # SmartCmd UI panels
 │       ├── bulkEditPanel.ts              # Bulk operations UI
 │       ├── manualButtonFormPanel.ts      # Manual button creation
 │       ├── editButtonFormPanel.ts        # Button editing UI
+│       ├── groupEditPanel.ts             # Group management UI
 │       └── aiButtonDescriptionPanel.ts   # AI button preview
 └── promptEnhancer/           # Prompt Enhancer feature module
     ├── promptEnhancer.ts     # Core enhancement logic
@@ -200,7 +228,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
 
 This project is licensed under the GNU General Public License v3.0 - see [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **AI Providers** - GitHub Copilot, OpenAI, Anthropic Claude, Google Gemini, Ollama
 - **VS Code Extension API** - Seamless IDE integration
@@ -214,4 +242,4 @@ This project is licensed under the GNU General Public License v3.0 - see [LICENS
 
 ---
 
-Made with ❤️ by developers, for developers. Star ⭐ if you find this useful!
+
