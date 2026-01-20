@@ -2,7 +2,7 @@
   "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "Boost your productivity through AI-driven tools.",
-  "version": "0.8.1",
+  "version": "0.9.1",
   "publisher": "DevBoost",
   "icon": "images/devboost.png",
   "repository": {
@@ -65,12 +65,12 @@
       },
       {
         "command": "devboost.smartCmdCreateButtons",
-        "title": "SmartCmd: Create AI Suggested Buttons for this workspace",
+        "title": "Create AI Suggested Buttons for this workspace",
         "icon": "$(sparkle)"
       },
       {
         "command": "devboost.smartCmdCreateCustomButton",
-        "title": "SmartCmd: Create Custom Button",
+        "title": "Create Custom Button",
         "icon": "$(add)"
       },
       {
@@ -105,17 +105,17 @@
       },
       {
         "command": "devboost.showPromptEnhancer",
-        "title": "DevBoost: Show Prompt Enhancer",
+        "title": "Show Prompt Enhancer",
         "icon": "$(sparkle)"
       },
       {
         "command": "devboost.quickEnhance",
-        "title": "DevBoost: Quick Enhance from Clipboard",
+        "title": "Quick Enhance from Clipboard",
         "icon": "$(zap)"
       },
       {
         "command": "devboost.enhancePromptFromInput",
-        "title": "DevBoost: Enhance Prompt from Input",
+        "title": "Enhance Prompt from Input",
         "icon": "$(sparkle)"
       },
       {
@@ -152,6 +152,46 @@
         "command": "devboost.manageApiKeys",
         "title": "Manage API Keys",
         "icon": "$(key)"
+      },
+      {
+        "command": "devboost.createGroup",
+        "title": "Create Group",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "devboost.deleteGroup",
+        "title": "Delete Group",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "devboost.renameGroup",
+        "title": "Rename Group",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "devboost.addButtonToGroup",
+        "title": "Add to Group",
+        "icon": "$(add)"
+      },
+      {
+        "command": "devboost.removeButtonFromGroup",
+        "title": "Remove from Group",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "devboost.editGroups",
+        "title": "Edit Groups",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "devboost.exportSmartCmds",
+        "title": "Export Buttons",
+        "icon": "$(export)"
+      },
+      {
+        "command": "devboost.importSmartCmds",
+        "title": "Import Buttons",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
@@ -172,14 +212,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "devboost.refreshButtons",
+          "command": "devboost.bulkEditButtons",
           "when": "view == devboost.smartCmdView",
           "group": "navigation@3"
         },
         {
-          "command": "devboost.bulkEditButtons",
+          "command": "devboost.editGroups",
           "when": "view == devboost.smartCmdView",
           "group": "navigation@4"
+        },
+        {
+          "command": "devboost.refreshButtons",
+          "when": "view == devboost.smartCmdView",
+          "group": "navigation@5"
         },
         {
           "command": "devboost.configureSmartCmdAIModel",
@@ -202,6 +247,16 @@
           "group": "z_tracking@3"
         },
         {
+          "command": "devboost.importSmartCmds",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@4"
+        },
+        {
+          "command": "devboost.exportSmartCmds",
+          "when": "view == devboost.smartCmdView",
+          "group": "z_tracking@5"
+        },
+        {
           "command": "devboost.configurePromptEnhancerAIModel",
           "when": "view == devboost.promptEnhancerView",
           "group": "z_tracking@1"
@@ -219,34 +274,49 @@
           "group": "inline@1"
         },
         {
-          "command": "devboost.smartCmdCreateCustomButton",
-          "when": "view == devboost.smartCmdView && viewItem == section",
-          "group": "inline@2"
-        },
-        {
           "command": "devboost.editButton",
-          "when": "view == devboost.smartCmdView && viewItem =~ /Button$/",
+          "when": "view == devboost.smartCmdView && viewItem =~ /Button/",
           "group": "1_modify@1"
         },
         {
           "command": "devboost.addToGlobal",
-          "when": "view == devboost.smartCmdView && viewItem == workspaceButton",
+          "when": "view == devboost.smartCmdView && viewItem =~ /^workspace.*Button/",
           "group": "1_modify@3"
         },
         {
           "command": "devboost.openScriptFile",
-          "when": "view == devboost.smartCmdView && viewItem =~ /ScriptButton$/",
+          "when": "view == devboost.smartCmdView && viewItem =~ /ScriptButton/",
           "group": "1_modify@2"
         },
         {
-          "command": "devboost.addToGlobal",
-          "when": "view == devboost.smartCmdView && (viewItem == workspaceButton || viewItem == workspaceScriptButton)",
-          "group": "1_modify@3"
+          "command": "devboost.addButtonToGroup",
+          "when": "view == devboost.smartCmdView && viewItem =~ /Button/ && viewItem =~ /^(global|workspace)/",
+          "group": "2_group@1"
+        },
+        {
+          "command": "devboost.removeButtonFromGroup",
+          "when": "view == devboost.smartCmdView && viewItem =~ /InGroupB$/",
+          "group": "2_group@2"
         },
         {
           "command": "devboost.deleteButton",
           "when": "view == devboost.smartCmdView && viewItem =~ /Button$/",
-          "group": "1_modify@4"
+          "group": "3_delete@1"
+        },
+        {
+          "command": "devboost.createGroup",
+          "when": "view == devboost.smartCmdView && viewItem == section",
+          "group": "inline@3"
+        },
+        {
+          "command": "devboost.renameGroup",
+          "when": "view == devboost.smartCmdView && viewItem =~ /Group$/",
+          "group": "1_group@1"
+        },
+        {
+          "command": "devboost.deleteGroup",
+          "when": "view == devboost.smartCmdView && viewItem =~ /Group$/",
+          "group": "1_group@2"
         }
       ]
     }
@@ -259,7 +329,11 @@
     "lint": "eslint src",
     "test": "vscode-test"
   },
+  "dependencies": {
+    "adm-zip": "^0.5.16"
+  },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.9.2",
     "@types/vscode": "^1.99.0",

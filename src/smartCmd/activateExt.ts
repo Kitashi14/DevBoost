@@ -3,9 +3,10 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as handlers from './handlers';
+import * as importExport from './importExport';
 import * as scriptManager from './scriptManager';
 import * as configManager from '../configManager';
-import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton } from './treeProvider';
+import { SmartCmdButtonTreeItem, SmartCmdButtonsTreeProvider, smartCmdButton, SmartCmdGroupTreeItem } from './treeProvider';
 
 export async function activateSmartCmd(
 	context: vscode.ExtensionContext,
@@ -124,6 +125,40 @@ export async function activateSmartCmd(
 		await handlers.openBulkEditPanel(buttonsProvider);
 	});
 
+	// Group management commands
+	const createGroupDisposable = vscode.commands.registerCommand('devboost.createGroup', async (sectionItem?: any) => {
+		await handlers.createGroup(buttonsProvider, sectionItem);
+	});
+
+	const deleteGroupDisposable = vscode.commands.registerCommand('devboost.deleteGroup', async (item: SmartCmdGroupTreeItem) => {
+		await handlers.deleteGroup(buttonsProvider, item);
+	});
+
+	const renameGroupDisposable = vscode.commands.registerCommand('devboost.renameGroup', async (item: SmartCmdGroupTreeItem) => {
+		await handlers.renameGroup(buttonsProvider, item);
+	});
+
+	const addButtonToGroupDisposable = vscode.commands.registerCommand('devboost.addButtonToGroup', async (item: SmartCmdButtonTreeItem) => {
+		await handlers.addButtonToGroup(buttonsProvider, item);
+	});
+
+	const removeButtonFromGroupDisposable = vscode.commands.registerCommand('devboost.removeButtonFromGroup', async (item: SmartCmdButtonTreeItem) => {
+		await handlers.removeButtonFromGroup(buttonsProvider, item);
+	});
+
+	const editGroupsDisposable = vscode.commands.registerCommand('devboost.editGroups', async () => {
+		await handlers.openGroupEditPanel(buttonsProvider);
+	});
+
+	// Import/Export commands
+	const exportSmartCmdsDisposable = vscode.commands.registerCommand('devboost.exportSmartCmds', async () => {
+		await importExport.exportSmartCmds(buttonsProvider);
+	});
+
+	const importSmartCmdsDisposable = vscode.commands.registerCommand('devboost.importSmartCmds', async () => {
+		await importExport.importSmartCmds(buttonsProvider);
+	});
+
 	// Register all SmartCmd commands
 	context.subscriptions.push(
 		createAIButtonsDisposable,
@@ -136,7 +171,15 @@ export async function activateSmartCmd(
 		openButtonsFileDisposable,
 		openScriptFileDisposable,
 		configureSmartCmdAIModelDisposable,
-		bulkEditButtonsDisposable
+		bulkEditButtonsDisposable,
+		createGroupDisposable,
+		deleteGroupDisposable,
+		renameGroupDisposable,
+		addButtonToGroupDisposable,
+		removeButtonFromGroupDisposable,
+		editGroupsDisposable,
+		exportSmartCmdsDisposable,
+		importSmartCmdsDisposable
 	);
 
 	// Listen for workspace folder changes to reload buttons
@@ -188,9 +231,18 @@ async function loadExampleButtonsIfNeeded(
 					const scriptsDir = path.join(workspaceRoot, '.vscode', 'devBoost', 'scripts');
 					await fs.mkdir(scriptsDir, { recursive: true });
 					
-					const scriptPath = path.join(scriptsDir, examples.exampleScript.filename);
-					await fs.writeFile(scriptPath, examples.exampleScript.content, { encoding: 'utf-8' });
-					
+					// Determine script filename/content (prefer platform-specific example if provided)
+					let scriptFilename = examples.exampleScript.filename;
+					let scriptContent = examples.exampleScript.content;
+
+					if (process.platform === 'win32' && examples.exampleScriptWindows) {
+						scriptFilename = examples.exampleScriptWindows.filename;
+						scriptContent = examples.exampleScriptWindows.content;
+					}
+
+					const scriptPath = path.join(scriptsDir, scriptFilename);
+					await fs.writeFile(scriptPath, scriptContent, { encoding: 'utf-8' });
+
 					// Make script executable on Unix-like systems
 					if (process.platform !== 'win32') {
 						try {
@@ -199,7 +251,10 @@ async function loadExampleButtonsIfNeeded(
 							console.warn('DevBoost: Could not make example script executable:', chmodError);
 						}
 					}
-					
+
+					// Update the button's scriptFile to the platform-specific filename
+					scriptButton.scriptFile = scriptFilename;
+
 					// Generate command for the script button
 					const scriptCommand = scriptManager.generateScriptCommand(
 						scriptButton.scriptFile,
@@ -213,14 +268,14 @@ async function loadExampleButtonsIfNeeded(
 				}
 			}
 
-			const added = await buttonsProvider.addButtons(examples.workspace, 'workspace');
+			const added = await buttonsProvider.addButtons(examples.workspace, 'workspace', false);
 			loadedCount += added;
 			console.log(`DevBoost: Loaded ${added} example workspace buttons`);
 		}
 
 		// Load global examples if no global buttons exist
 		if (globalButtonCount === 0 && examples.global && examples.global.length > 0) {
-			const added = await buttonsProvider.addButtons(examples.global, 'global');
+			const added = await buttonsProvider.addButtons(examples.global, 'global', false);
 			loadedCount += added;
 			console.log(`DevBoost: Loaded ${added} example global buttons`);
 		}

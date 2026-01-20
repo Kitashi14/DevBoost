@@ -5,12 +5,13 @@ import * as path from 'path';
 import * as aiServices from './aiServices';
 import * as activityLogging from '../activityLogging';
 import * as scriptManager from './scriptManager';
-import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButtonTreeItem } from './treeProvider';
+import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButtonTreeItem, SmartCmdGroupTreeItem, ButtonGroup } from './treeProvider';
 import { CustomDialog } from '../commonView/customDialog';
 import { InputFormPanel } from '../commonView/inputFormPanel';
 import { ButtonFormPanel } from './view/manualButtonFormPanel';
 import { AIButtonDescriptionPanel } from './view/aiButtonDescriptionPanel';
 import { BulkEditPanel, BulkOperation } from './view/bulkEditPanel';
+import { GroupEditPanel, GroupOperation } from './view/groupEditPanel';
 
 // Create AI-suggested buttons based on activity log
 export async function createAIButtons( buttonsProvider: SmartCmdButtonsTreeProvider) {
@@ -869,5 +870,177 @@ export async function openBulkEditPanel(buttonsProvider: SmartCmdButtonsTreeProv
 		() => buttonsProvider.getButtons(), // Getter function for fresh button data
 		buttonsProvider.globalStoragePath, // Global storage path for opening scripts
 		buttonsProvider.onDidChangeTreeData // Event to listen for changes
+	);
+}
+
+// ============ GROUP MANAGEMENT HANDLERS ============
+
+/**
+ * Create a new group in the specified scope
+ */
+export async function createGroup(buttonsProvider: SmartCmdButtonsTreeProvider, sectionItem?: any): Promise<void> {
+	// Determine scope from the section item if provided
+	let scope: 'workspace' | 'global' = 'workspace';
+	
+	if (sectionItem && sectionItem.section) {
+		scope = sectionItem.section as 'workspace' | 'global';
+	} else {
+		// Ask user to choose scope
+		const scopeChoice = await vscode.window.showQuickPick(
+			[
+				{ label: 'Global', description: 'Available across all workspaces', value: 'global' as const },
+				{ label: 'Workspace', description: 'Only available in this workspace', value: 'workspace' as const }
+			],
+			{ placeHolder: 'Select where to create the group' }
+		);
+
+		if (!scopeChoice) {
+			return;
+		}
+		scope = scopeChoice.value;
+	}
+
+	// Ask for group name
+	const groupName = await vscode.window.showInputBox({
+		prompt: 'Enter a name for the new group',
+		placeHolder: 'e.g., Build Commands, Git Shortcuts',
+		validateInput: (value) => {
+			if (!value || value.trim().length === 0) {
+				return 'Group name cannot be empty';
+			}
+			if (value.length > 50) {
+				return 'Group name is too long (max 50 characters)';
+			}
+			return null;
+		}
+	});
+
+	if (!groupName) {
+		return;
+	}
+
+	await buttonsProvider.createGroup(groupName, scope);
+}
+
+/**
+ * Delete a group
+ */
+export async function deleteGroup(buttonsProvider: SmartCmdButtonsTreeProvider, item: SmartCmdGroupTreeItem): Promise<void> {
+	if (!item || !item.group) {
+		vscode.window.showWarningMessage('Please select a group to delete.');
+		return;
+	}
+
+	await buttonsProvider.deleteGroup(item);
+}
+
+/**
+ * Rename a group
+ */
+export async function renameGroup(buttonsProvider: SmartCmdButtonsTreeProvider, item: SmartCmdGroupTreeItem): Promise<void> {
+	if (!item || !item.group) {
+		vscode.window.showWarningMessage('Please select a group to rename.');
+		return;
+	}
+
+	const newName = await vscode.window.showInputBox({
+		prompt: 'Enter a new name for the group',
+		value: item.group.name,
+		placeHolder: 'e.g., Build Commands, Git Shortcuts',
+		validateInput: (value) => {
+			if (!value || value.trim().length === 0) {
+				return 'Group name cannot be empty';
+			}
+			if (value.length > 50) {
+				return 'Group name is too long (max 50 characters)';
+			}
+			return null;
+		}
+	});
+
+	if (!newName || newName === item.group.name) {
+		return;
+	}
+
+	await buttonsProvider.renameGroup(item, newName);
+}
+
+/**
+ * Add a button to a group
+ */
+export async function addButtonToGroup(buttonsProvider: SmartCmdButtonsTreeProvider, item: SmartCmdButtonTreeItem): Promise<void> {
+	if (!item || !item.button) {
+		vscode.window.showWarningMessage('Please select a button to add to a group.');
+		return;
+	}
+
+	// Get available groups for this button
+	const availableGroups = buttonsProvider.getAvailableGroupsForButton(item.button);
+
+	if (availableGroups.length === 0) {
+		const groups = buttonsProvider.getGroups().filter(g => g.scope === item.button.scope);
+		if (groups.length === 0) {
+			// No groups exist - offer to create one
+			const createChoice = await vscode.window.showInformationMessage(
+				`No groups exist for ${item.button.scope} buttons. Would you like to create one?`,
+				'Create Group',
+				'Cancel'
+			);
+
+			if (createChoice === 'Create Group') {
+				await createGroup(buttonsProvider, { section: item.button.scope });
+			}
+			return;
+		} else {
+			// Button is already in all groups
+			vscode.window.showInformationMessage(`"${item.button.name}" is already in all available groups.`);
+			return;
+		}
+	}
+
+	// Let user select which group to add the button to
+	const groupChoice = await vscode.window.showQuickPick(
+		availableGroups.map(g => ({
+			label: g.name,
+			description: `${g.buttonIds.length} button${g.buttonIds.length !== 1 ? 's' : ''}`,
+			group: g
+		})),
+		{ placeHolder: 'Select a group to add the button to' }
+	);
+
+	if (!groupChoice) {
+		return;
+	}
+
+	await buttonsProvider.addButtonToGroup(item, groupChoice.group.id);
+}
+
+/**
+ * Remove a button from its current group
+ */
+export async function removeButtonFromGroup(buttonsProvider: SmartCmdButtonsTreeProvider, item: SmartCmdButtonTreeItem): Promise<void> {
+	if (!item || !item.button || !item.groupId) {
+		vscode.window.showWarningMessage('Please select a button within a group to remove.');
+		return;
+	}
+
+	await buttonsProvider.removeButtonFromGroup(item);
+}
+
+/**
+ * Open the group edit panel for managing all groups
+ */
+export async function openGroupEditPanel(buttonsProvider: SmartCmdButtonsTreeProvider): Promise<void> {
+	const groups = buttonsProvider.getGroups();
+	const buttons = buttonsProvider.getButtons();
+
+	GroupEditPanel.show(
+		groups,
+		buttons,
+		async (operations: GroupOperation[]) => {
+			await buttonsProvider.performGroupOperations(operations);
+		},
+		() => ({ groups: buttonsProvider.getGroups(), buttons: buttonsProvider.getButtons() }),
+		buttonsProvider.onDidChangeTreeData
 	);
 }

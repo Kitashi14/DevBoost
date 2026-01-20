@@ -139,7 +139,7 @@ IMPORTANT:
 Respond with ONLY the enhanced description text, nothing else.`;
 
 		const response = await configManager.sendAIRequest('smartCmd', prompt, globalStoragePath);
-		const fullResponse = response.text;
+		let fullResponse = response.text;
 
 		// Log prompt for development
 		await logPromptToFile('enhancePrompt', prompt, fullResponse, {
@@ -148,6 +148,8 @@ Respond with ONLY the enhanced description text, nothing else.`;
 			model: response.model
 		});
 
+		// remove any extra quotes or formatting
+		fullResponse = fullResponse.replace(/^["'`]+|["'`]+$/g, '');
 		return fullResponse.trim();
 
 	} catch (error) {
@@ -465,7 +467,7 @@ ${optimizedLog.recentLogs.join('\n')}
 4. **DIRECTORY-AWARE**: Notice which directories commands are executed in (from Context.terminal.cwd)
 5. **FAILURE-PROOF DESIGN**: Address commands that failed (non-zero exit codes)
 6. **CHAIN INTELLIGENCE**: Create buttons that automate entire workflows, not just single commands
-7. **CHAIN COMMANDS INPUT**: If commands require user input, use '{variableName}' placeholders, quotes surrounding them in the command field to take input with space support
+7. **CHAIN COMMANDS INPUT**: If commands require user input, use "{variableName}" placeholders, double quotes surrounding them in the command field to take input with space support
 8. **SCRIPT VS COMMAND CHAIN**: For complex workflows, generate scripts instead of command chains
 
 🔄 WHEN TO USE SCRIPTS VS COMMAND CHAINS:
@@ -492,7 +494,7 @@ SIMPLE COMMAND CHAIN:
   Create: "npm install && npm run build && npm test"
   
 • If you see: "git add ." → "git commit -m ..." → "git push" pattern
-  Create: "git add . && git commit -m '{message}' && git push"
+  Create: "git add . && git commit -m \"{message}\" && git push"
   With inputs: [{"placeholder": "Enter commit message", "variable": "{message}"}]
 
 • If you see frequent directory changes before commands
@@ -501,14 +503,14 @@ SIMPLE COMMAND CHAIN:
   	cmd: "[command]"
   Use <workspace> keyword to make it portable across different machines
 
-• If command needs user input, use '{variableName}' placeholders:
-  Command: "docker exec -it '{container}' bash"
+• If command needs user input, use "{variableName}" placeholders:
+  Command: "docker exec -it \"{container}\" bash"
   With inputs: [{"placeholder": "Container name", "variable": "{container}"}]
 
 COMPLEX SCRIPT:
 • If you see: "cd frontend && npm install" → "cd ../backend && npm install" → "cd .. && docker-compose up"
   Use scriptContent with proper directory management and error handling
-• If script requires any user input as arguments then definitely add '{variableName}' for taking inputs
+• If script requires any user input as arguments then definitely add "{variableName}" for taking inputs
 
 🔧 ${platform} COMMAND REQUIREMENTS:
 ${platform === 'Windows' ? '• Use && for chaining, handle Windows paths, use npm.cmd if needed\n• Scripts: Use batch script syntax (.bat)' : ''}
@@ -526,7 +528,7 @@ Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
-4. If the command needs user input, include input fields with placeholders (use '{variableName}' format)
+4. If the command needs user input, include input fields with placeholders (use "{variableName}" format)
 5. execDir: where to run from (applies to both cmd and scriptContent)
 
 Existing Buttons to Check (for duplication avoidance):
@@ -566,7 +568,7 @@ WITH INPUT FIELDS - COMMAND FORMAT:
     {
         "name": "📝 Git Commit & Push",
         "execDir": "<workspace>",
-        "cmd": "git add . && git commit -m '{message}' && git push",
+        "cmd": "git add . && git commit -m \"{message}\" && git push",
         "description": "Stages changes, commits with custom message, and pushes to remote",
         "inputs": [
             {
@@ -578,7 +580,7 @@ WITH INPUT FIELDS - COMMAND FORMAT:
     {
         "name": "🐳 Docker Execute",
         "execDir": "<workspace>/path/to/context",
-        "cmd": "docker exec -it '{container}' '{command}'",
+        "cmd": "docker exec -it \"{container}\" \"{command}\"",
         "description": "Execute command inside a Docker container",
         "inputs": [
             {
@@ -826,8 +828,8 @@ Provide:
 1. A short descriptive name (with an emoji prefix, max 30 characters)
 2. EITHER "cmd" (for simple commands) OR "scriptContent" (for complex workflows) - NEVER both
 3. A brief description of what the button does (this will be stored as description) - NO EMOJIS
-4. If the command needs user input, include input fields with placeholders (use '{variableName}' format, put quotes around variable in cmd/scriptContent to support spaces)
-5. If script requires any user input as arguments then definitely add '{variableName}' for taking inputs
+4. If the command needs user input, include input fields with placeholders (use "{variableName}" format, put quotes around variable in cmd/scriptContent to support spaces)
+5. If script requires any user input as arguments then definitely add "{variableName}" for taking inputs
 
 Existing Buttons to Check (for duplication avoidance):
 ${existingButtonsInfo}
@@ -856,7 +858,7 @@ WITH INPUT FIELDS - COMMAND:
 {
     "name": "📝 Git Commit",
 	"execDir": "<workspace>",
-    "cmd": "git add . && git commit -m '{message}'",
+    "cmd": "git add . && git commit -m \"{message}\"",
     "description": "Stage all changes and commit with a custom message",
     "inputs": [
         {
@@ -1001,7 +1003,7 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 	if (activityString.includes('git') || activityString.includes('commit')) {
 		buttons.push({
 			name: '📝 Git Commit',
-			cmd: 'git add . && git commit -m \'{message}\'',
+			cmd: 'git add . && git commit -m \"{message}\"',
 			description: 'Stage all changes and commit with a custom message',
 			inputs: [
 				{
@@ -1055,7 +1057,7 @@ export function getFallbackSuggestions(topActivities: string[]): smartCmdButton[
 			},
 			{
 				name: '📝 Commit',
-				cmd: 'git add . && git commit -m \'{message}\'',
+				cmd: 'git add . && git commit -m \"{message}\"',
 				description: 'Commit changes with a message',
 				inputs: [
 					{
