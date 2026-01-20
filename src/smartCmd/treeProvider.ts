@@ -30,6 +30,15 @@ export interface smartCmdButton {
 	modelUsed?: string;             // AI model used for this button (if any)
 }
 
+// Button group interface - stores only button IDs to avoid redundant data
+export interface ButtonGroup {
+	id: string;                     // Unique identifier for the group
+	name: string;                   // Display name of the group
+	buttonIds: string[];            // Ordered array of button IDs in this group
+	scope: 'workspace' | 'global';  // Whether this is a workspace or global group
+	collapsed?: boolean;            // UI state - whether the group is collapsed
+}
+
 // Section type for organizing buttons
 type SectionType = 'smartcmd' | 'global' | 'workspace';
 
@@ -38,7 +47,7 @@ class SmartCmdTreeItemBase extends vscode.TreeItem {
 	constructor(
 		label: string,
 		collapsibleState: vscode.TreeItemCollapsibleState,
-		public readonly itemType: 'smartcmd' | 'section' | 'button'
+		public readonly itemType: 'smartcmd' | 'section' | 'button' | 'group' | 'allButtons'
 	) {
 		super(label, collapsibleState);
 	}
@@ -61,11 +70,46 @@ class SmartCmdSectionTreeItem extends SmartCmdTreeItemBase {
 	}
 }
 
+// Group tree item (for button groups)
+export class SmartCmdGroupTreeItem extends SmartCmdTreeItemBase {
+	constructor(
+		public readonly group: ButtonGroup,
+		public readonly validButtonCount: number // Count of buttons that actually exist
+	) {
+		super(
+			group.name,
+			group.collapsed ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded,
+			'group'
+		);
+		this.description = `${validButtonCount} button${validButtonCount !== 1 ? 's' : ''}`;
+		this.contextValue = group.scope === 'global' ? 'globalGroup' : 'workspaceGroup';
+		this.iconPath = new vscode.ThemeIcon('file-directory');
+	}
+}
+
+// All buttons tree item (for button groups)
+export class SmartCmdAllButtonsTreeItem extends SmartCmdTreeItemBase {
+	constructor(
+		public readonly group: ButtonGroup,
+		public readonly validButtonCount: number // Count of buttons that actually exist
+	) {
+		super(
+			group.name,
+			group.collapsed ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded,
+			'allButtons'
+		);
+		this.description = `${validButtonCount} button${validButtonCount !== 1 ? 's' : ''}`;
+		this.contextValue = group.scope === 'global' ? 'globalAllB' : 'workspaceAllB';
+		this.iconPath = new vscode.ThemeIcon('file-directory');
+	}
+}
+
 // Tree item for buttons
 export class SmartCmdButtonTreeItem extends SmartCmdTreeItemBase {
 	constructor(
 		public readonly button: smartCmdButton,
-		public readonly collapsibleState: vscode.TreeItemCollapsibleState
+		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+		public readonly groupId?: string // Optional group ID when button is shown in a group
 	) {
 		super(button.name, collapsibleState, 'button');
 		
@@ -102,12 +146,13 @@ export class SmartCmdButtonTreeItem extends SmartCmdTreeItemBase {
 		
 		this.iconPath = new vscode.ThemeIcon(button.scriptFile ? 'debug-line-by-line' : 'play');
 		
-		// Set contextValue based on button scope and whether it's a script
+		// Set contextValue based on button scope, whether it's a script, and if it's in a group
 		// This allows conditional menu items in package.json
+		const inGroupSuffix = groupId ? 'InGroupB' : '';
 		if (button.scriptFile) {
-			this.contextValue = button.scope === 'global' ? 'globalScriptButton' : 'workspaceScriptButton';
+			this.contextValue = (button.scope === 'global' ? 'globalScriptButton' : 'workspaceScriptButton') + inGroupSuffix;
 		} else {
-			this.contextValue = button.scope === 'global' ? 'globalButton' : 'workspaceButton';
+			this.contextValue = (button.scope === 'global' ? 'globalButton' : 'workspaceButton') + inGroupSuffix;
 		}
 		
 		// Make it clickable - pass the entire button object for input handling
@@ -125,6 +170,7 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 	readonly onDidChangeTreeData: vscode.Event<SmartCmdTreeItemBase | undefined | null | void> = this._onDidChangeTreeData.event;
 
 	private buttons: smartCmdButton[] = [];
+	private groups: ButtonGroup[] = [];
 
 	constructor(
 		private context: vscode.ExtensionContext,
@@ -140,8 +186,27 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 		return this.buttons;
 	}
 
+	getGroups(): ButtonGroup[] {
+		return this.groups;
+	}
+
+	// Get the path for global groups storage
+	private getGlobalGroupsPath(): string {
+		return path.join(path.dirname(this.globalButtonsPath), 'smartCmdGroups.json');
+	}
+
+	// Get the path for workspace groups storage
+	private getWorkspaceGroupsPath(): string | null {
+		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+			return null;
+		}
+		const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+		return path.join(workspaceRoot, '.vscode', 'devBoost', 'smartCmdGroups.json');
+	}
+
 	async loadButtons(): Promise<void> {
 		this.buttons = [];
+		this.groups = [];
 
 		// Load global buttons from JSON file
 		if (this.globalButtonsPath) {
@@ -155,6 +220,18 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 				})));
 			} catch {
 				// File doesn't exist or is invalid, no global buttons to load
+			}
+
+			// Load global groups
+			try {
+				const groupsContent = await fs.readFile(this.getGlobalGroupsPath(), 'utf-8');
+				const globalGroups = JSON.parse(groupsContent);
+				this.groups.push(...globalGroups.map((g: ButtonGroup) => ({ 
+					...g, 
+					scope: 'global' as const 
+				})));
+			} catch {
+				// File doesn't exist or is invalid, no global groups to load
 			}
 		}
 
@@ -174,8 +251,23 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 			} catch {
 				// File doesn't exist, no workspace buttons to load
 			}
-		}
 
+			// Load workspace groups
+			const workspaceGroupsPath = this.getWorkspaceGroupsPath();
+			if (workspaceGroupsPath) {
+				try {
+					const groupsContent = await fs.readFile(workspaceGroupsPath, 'utf-8');
+					const workspaceGroups = JSON.parse(groupsContent);
+					this.groups.push(...workspaceGroups.map((g: ButtonGroup) => ({ 
+						...g, 
+						scope: 'workspace' as const 
+					})));
+				} catch {
+					// File doesn't exist, no workspace groups to load
+				}
+			}
+		}
+		this.saveButtons(); // Ensure all buttons have IDs
 		this.refresh();
 	}
 
@@ -188,43 +280,111 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 		if (!element) {
 			const globalButtons = this.buttons.filter(b => b.scope === 'global');
 			const workspaceButtons = this.buttons.filter(b => b.scope === 'workspace');
+			const globalGroups = this.groups.filter(g => g.scope === 'global');
+			const workspaceGroups = this.groups.filter(g => g.scope === 'workspace');
 
 			const sections: SmartCmdTreeItemBase[] = [];
 			
-			// Add Global section if there are global buttons
-			if (globalButtons.length > 0) {
+			// Add Global section if there are global buttons or groups
+			if (globalButtons.length > 0 || globalGroups.length > 0) {
 				sections.push(new SmartCmdSectionTreeItem('global', globalButtons.length));
 			}
 			
-			// Add Workspace section if there are workspace buttons
-			if (workspaceButtons.length > 0) {
+			// Add Workspace section if there are workspace buttons or groups
+			if (workspaceButtons.length > 0 || workspaceGroups.length > 0) {
 				sections.push(new SmartCmdSectionTreeItem('workspace', workspaceButtons.length));
 			}
 
 			return Promise.resolve(sections);
 		}
 
-		// If element is a section, return its buttons
+		// If element is a section, return its groups first, then buttons
 		if (element instanceof SmartCmdSectionTreeItem) {
+			const children: SmartCmdTreeItemBase[] = [];
+			
+			// Add groups for this section
+			const sectionGroups = this.groups.filter(g => g.scope === element.section);
+			for (const group of sectionGroups) {
+				// Count valid buttons in the group (buttons that actually exist)
+				const validButtonCount = group.buttonIds.filter(id => 
+					this.buttons.some(b => b.id === id)
+				).length;
+				children.push(new SmartCmdGroupTreeItem(group, validButtonCount));
+			}
+			
+			// Add all buttons for this section (buttons appear in section regardless of group membership)
 			const sectionButtons = this.buttons
 				.filter(b => b.scope === element.section)
 				.map(button => new SmartCmdButtonTreeItem(button, vscode.TreeItemCollapsibleState.None));
+			if(sectionGroups.length > 0 && sectionButtons.length > 0) {
+				const allButtonGroup: ButtonGroup = {
+					id: crypto.randomUUID(),
+					name: "All Buttons",
+					buttonIds: sectionButtons.map(b => b.button.id!),
+					scope: element.section == 'global' ? 'global' : 'workspace',
+					collapsed: false
+				};
+				children.push(new SmartCmdAllButtonsTreeItem(allButtonGroup, sectionButtons.length));
+			}
+			else {
+				children.push(...sectionButtons);
+			}
 			
-			return Promise.resolve(sectionButtons);
+			return Promise.resolve(children);
+		}
+
+		// If element is a group, return its buttons (in order)
+		if (element instanceof SmartCmdGroupTreeItem) {
+			const groupButtons: SmartCmdButtonTreeItem[] = [];
+			
+			// Get buttons in the order specified by the group
+			for (const buttonId of element.group.buttonIds) {
+				const button = this.buttons.find(b => b.id === buttonId);
+				if (button) {
+					// Pass group ID so we know this button is in a group context
+					groupButtons.push(new SmartCmdButtonTreeItem(
+						button, 
+						vscode.TreeItemCollapsibleState.None,
+						element.group.id
+					));
+				}
+			}
+			
+			return Promise.resolve(groupButtons);
+		}
+
+		if( element instanceof SmartCmdAllButtonsTreeItem) {
+			const allButtons: SmartCmdButtonTreeItem[] = [];
+			
+			// Get buttons in the order specified by the group
+			for (const buttonId of element.group.buttonIds) {
+				const button = this.buttons.find(b => b.id === buttonId);
+				if (button) {
+					// Pass group ID so we know this button is in a group context
+					allButtons.push(new SmartCmdButtonTreeItem(
+						button, 
+						vscode.TreeItemCollapsibleState.None
+					));
+				}
+			}
+			
+			return Promise.resolve(allButtons);
 		}
 
 		// If element is a button, it has no children
 		return Promise.resolve([]);
 	}
 
-	async addButtons(buttons: smartCmdButton[], scope: 'workspace' | 'global'): Promise<number> {
+	async addButtons(buttons: smartCmdButton[], scope: 'workspace' | 'global', checkDuplicates: boolean = true, silent: boolean = false): Promise<number> {
 		if (!buttons || buttons.length === 0) {
-			vscode.window.showWarningMessage('DevBoost: No buttons to add.');
+			if (!silent) {
+				vscode.window.showWarningMessage('DevBoost: No buttons to add.');
+			}
 			return 0;
 		}
 
 		// Process buttons with scripts first
-		const processedButtons: smartCmdButton[] = [];
+		let processedButtons: smartCmdButton[] = [];
 		for (const button of buttons) {
 			if (button.scriptContent) {
 				// Button needs a script file
@@ -255,36 +415,37 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 		// Validate buttons and check for duplicates
 		const validButtons: smartCmdButton[] = [];
 		const duplicateButtons: Array<{newButton: smartCmdButton, existingButton: smartCmdButton}> = [];
-		const invalidButtons: number[] = [];
+		var invalidButtons: number = 0;
 
-		// Use withProgress for duplicate checking since it calls AI
-		await vscode.window.withProgress({
-			location: vscode.ProgressLocation.Notification,
-			title: "Checking for duplicate buttons",
-			cancellable: false
-		}, async (progress) => {
-			for (let i = 0; i < processedButtons.length; i++) {
-				const b = processedButtons[i];
-				
-				// Check if button is valid
-				if (!b.name || !b.cmd || b.name.trim().length === 0 || b.cmd.trim().length === 0) {
-					console.warn('DevBoost: Skipping invalid button:', b);
-					invalidButtons.push(i);
-					continue;
+		const processedButtonsCount = processedButtons.length;
+		processedButtons = processedButtons.filter(b=> !(!b.name || !b.cmd || b.name.trim().length === 0 || b.cmd.trim().length === 0))
+		invalidButtons = processedButtonsCount - processedButtons.length;
+
+		if(checkDuplicates){
+			// Use withProgress for duplicate checking since it calls AI
+			await vscode.window.withProgress({
+				location: vscode.ProgressLocation.Notification,
+				title: "Checking for duplicate buttons",
+				cancellable: false
+			}, async (progress) => {
+				for (let i = 0; i < processedButtons.length; i++) {
+					const b = processedButtons[i];
+
+					// Check for duplicates using AI-powered semantic comparison
+					progress.report({ message: `${i + 1}/${processedButtons.length}` });
+					const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope, this.globalStoragePath);
+
+					if (duplicateButton) {
+						duplicateButtons.push({newButton: b, existingButton: duplicateButton});
+						console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateButton.name + ')');
+					} else {
+						validButtons.push(b);
+					}
 				}
-
-				// Check for duplicates using AI-powered semantic comparison
-				progress.report({ message: `${i + 1}/${processedButtons.length}` });
-				const duplicateButton = await aiServices.checkDuplicateButton(b, this.buttons, scope, this.globalStoragePath);
-
-				if (duplicateButton) {
-					duplicateButtons.push({newButton: b, existingButton: duplicateButton});
-					console.warn('DevBoost: Duplicate/similar button:', b.name, '(similar to:', duplicateButton.name + ')');
-				} else {
-					validButtons.push(b);
-				}
-			}
-		});
+			});
+		}	else {
+			validButtons.push(...processedButtons);
+		}
 
 		console.log(duplicateButtons)
 		// Show feedback about duplicates - ask for confirmation one by one
@@ -390,10 +551,12 @@ What would you like to do?`;
 		}
 
 		if (validButtons.length === 0) {
-			if (invalidButtons.length > 0) {
-				vscode.window.showWarningMessage('DevBoost: No valid buttons to add.');
-			} else if (duplicateButtons.length > 0) {
-				vscode.window.showInformationMessage(`DevBoost: ${duplicateButtons.length >1 ? 'All duplicate buttons were' : 'Duplicate button was'} skipped.`);
+			if (!silent) {
+				if (invalidButtons > 0) {
+					vscode.window.showWarningMessage('DevBoost: No valid buttons to add.');
+				} else if (duplicateButtons.length > 0) {
+					vscode.window.showInformationMessage(`DevBoost: ${duplicateButtons.length >1 ? 'All duplicate buttons were' : 'Duplicate button was'} skipped.`);
+				}
 			}
 			return 0;
 		}
@@ -427,11 +590,13 @@ What would you like to do?`;
 		if (skippedDuplicates > 0) {
 			messages.push(`${skippedDuplicates} duplicate${skippedDuplicates > 1 ? 's' : ''} skipped`);
 		}
-		if (invalidButtons.length > 0) {
-			messages.push(`${invalidButtons.length} invalid button${invalidButtons.length > 1 ? 's' : ''} skipped`);
+		if (invalidButtons > 0) {
+			messages.push(`${invalidButtons} invalid button${invalidButtons > 1 ? 's' : ''} skipped`);
 		}
 		
-		vscode.window.showInformationMessage(`DevBoost: Added ${messages.join(', ')}.`);
+		if (!silent) {
+			vscode.window.showInformationMessage(`DevBoost: Added ${messages.join(', ')}.`);
+		}
 		return validButtons.length;
 	}
 
@@ -449,6 +614,37 @@ What would you like to do?`;
 		}
 
 		const button = this.buttons[index];
+		
+		// Check if button is in any groups
+		const groupsContainingButton = this.groups.filter(g => g.buttonIds.includes(button.id!));
+		
+		if (groupsContainingButton.length > 0) {
+			// Show warning about group membership
+			const groupNames = groupsContainingButton.map(g => `"${g.name}"`).join(', ');
+			const groupWord = groupsContainingButton.length === 1 ? 'group' : 'groups';
+			
+			const confirmChoice = await CustomDialog.show({
+				title: '⚠️ Button in Groups',
+				message: `This button "${button.name}" is currently in ${groupsContainingButton.length} ${groupWord}: ${groupNames}.\n\nDeleting this button will also remove it from all these groups.\n\nDo you want to continue?`,
+				buttons: [
+					{ label: 'Delete', id: 'delete', isPrimary: false },
+					{ label: 'Cancel', id: 'cancel', isPrimary: true }
+				],
+				markdown: false
+			});
+
+			if (confirmChoice !== 'delete') {
+				return;
+			}
+
+			// Remove button from all groups
+			for (const group of groupsContainingButton) {
+				group.buttonIds = group.buttonIds.filter(id => id !== button.id);
+			}
+			
+			// Save updated groups
+			await this.saveGroups();
+		}
 		
 		// Delete script file if exists
 		if (button.scriptFile && button.scope) {
@@ -550,6 +746,37 @@ What would you like to do?`;
 				}
 
 				const button = this.buttons[index];
+
+				// Check if button is in any groups
+				const groupsContainingButton = this.groups.filter(g => g.buttonIds.includes(button.id!));
+				
+				if (groupsContainingButton.length > 0) {
+					// Show warning about group membership
+					const groupNames = groupsContainingButton.map(g => `"${g.name}"`).join(', ');
+					const groupWord = groupsContainingButton.length === 1 ? 'group' : 'groups';
+					
+					const confirmChoice = await CustomDialog.show({
+						title: '⚠️ Button in Groups',
+						message: `This button "${button.name}" is currently in ${groupsContainingButton.length} ${groupWord}: ${groupNames}.\n\nDeleting this button will also remove it from all these groups.\n\nDo you want to continue?`,
+						buttons: [
+							{ label: 'Delete', id: 'delete', isPrimary: false },
+							{ label: 'Cancel', id: 'cancel', isPrimary: true }
+						],
+						markdown: false
+					});
+
+					if (confirmChoice !== 'delete') {
+						continue;
+					}
+
+					// Remove button from all groups
+					for (const group of groupsContainingButton) {
+						group.buttonIds = group.buttonIds.filter(id => id !== button.id);
+					}
+					
+					// Save updated groups
+					await this.saveGroups();
+				}
 
 				// Delete script file if exists
 				if (button.scriptFile && button.scope) {
@@ -723,6 +950,388 @@ What would you like to do?`;
 		} catch (error) {
 			console.error('Error saving workspace buttons:', error);
 		}
+	}
+
+	// ============ GROUP MANAGEMENT METHODS ============
+
+	// Save all groups
+	private async saveGroups(): Promise<void> {
+		await this.saveGlobalGroups();
+		await this.saveWorkspaceGroups();
+	}
+
+	// Save global groups
+	private async saveGlobalGroups(): Promise<void> {
+		if (!this.globalButtonsPath) {
+			return;
+		}
+
+		try {
+			const globalGroupsPath = this.getGlobalGroupsPath();
+			await fs.mkdir(path.dirname(globalGroupsPath), { recursive: true });
+			
+			const globalGroups = this.groups
+				.filter(g => g.scope === 'global' && g.name.toLowerCase() !== 'all buttons')
+				.map(({ scope, ...g }) => g); // Exclude scope when saving
+			
+			await fs.writeFile(globalGroupsPath, JSON.stringify(globalGroups, null, 2));
+		} catch (error) {
+			console.error('Error saving global groups:', error);
+		}
+	}
+
+	// Save workspace groups
+	private async saveWorkspaceGroups(): Promise<void> {
+		const workspaceGroupsPath = this.getWorkspaceGroupsPath();
+		if (!workspaceGroupsPath) {
+			return;
+		}
+
+		try {
+			await fs.mkdir(path.dirname(workspaceGroupsPath), { recursive: true });
+			
+			const workspaceGroups = this.groups
+				.filter(g => g.scope === 'workspace' && g.name.toLowerCase() !== 'all buttons')
+				.map(({ scope, ...g }) => g); // Exclude scope when saving
+			
+			await fs.writeFile(workspaceGroupsPath, JSON.stringify(workspaceGroups, null, 2));
+		} catch (error) {
+			console.error('Error saving workspace groups:', error);
+		}
+	}
+
+	// Create a new group
+	async createGroup(name: string, scope: 'workspace' | 'global'): Promise<ButtonGroup | null> {
+		// Validate name
+		if (!name || name.trim().length === 0) {
+			vscode.window.showWarningMessage('Group name cannot be empty.');
+			return null;
+		}
+
+		if(name.trim().toLowerCase() === 'all buttons') {
+			vscode.window.showWarningMessage('The group name "All Buttons" is reserved. Please choose a different name.');
+			return null;
+		}
+
+		// Check for duplicate group names in the same scope
+		const existingGroup = this.groups.find(
+			g => g.name.toLowerCase() === name.toLowerCase() && g.scope === scope
+		);
+		
+		if (existingGroup) {
+			vscode.window.showWarningMessage(`A group named "${name}" already exists in ${scope} scope.`);
+			return null;
+		}
+
+		const newGroup: ButtonGroup = {
+			id: crypto.randomUUID(),
+			name: name.trim(),
+			buttonIds: [],
+			scope,
+			collapsed: false
+		};
+
+		this.groups.push(newGroup);
+		await this.saveGroups();
+		this.refresh();
+		
+		vscode.window.showInformationMessage(`Created group: ${name}`);
+		return newGroup;
+	}
+
+	// Delete a group
+	async deleteGroup(item: SmartCmdGroupTreeItem): Promise<void> {
+		if (!item || !item.group) {
+			vscode.window.showWarningMessage('DevBoost: Invalid group item.');
+			return;
+		}
+
+		const group = item.group;
+		const index = this.groups.findIndex(g => g.id === group.id);
+		
+		if (index === -1) {
+			vscode.window.showWarningMessage(`DevBoost: Group "${group.name}" not found.`);
+			return;
+		}
+
+		// Confirm deletion
+		const confirmChoice = await vscode.window.showWarningMessage(
+			`Delete group "${group.name}"? Buttons in this group will not be deleted.`,
+			{ modal: true },
+			'Delete'
+		);
+
+		if (confirmChoice !== 'Delete') {
+			return;
+		}
+
+		this.groups.splice(index, 1);
+		await this.saveGroups();
+		this.refresh();
+		
+		vscode.window.showInformationMessage(`Deleted group: ${group.name}`);
+	}
+
+	// Rename a group
+	async renameGroup(item: SmartCmdGroupTreeItem, newName: string): Promise<void> {
+		if (!item || !item.group) {
+			vscode.window.showWarningMessage('DevBoost: Invalid group item.');
+			return;
+		}
+
+		if (!newName || newName.trim().length === 0) {
+			vscode.window.showWarningMessage('Group name cannot be empty.');
+			return;
+		}
+
+		const group = this.groups.find(g => g.id === item.group.id);
+		if (!group) {
+			vscode.window.showWarningMessage(`DevBoost: Group "${item.group.name}" not found.`);
+			return;
+		}
+
+		// Check for duplicate names in the same scope
+		const existingGroup = this.groups.find(
+			g => g.id !== group.id && g.name.toLowerCase() === newName.toLowerCase() && g.scope === group.scope
+		);
+		
+		if (existingGroup) {
+			vscode.window.showWarningMessage(`A group named "${newName}" already exists in ${group.scope} scope.`);
+			return;
+		}
+
+		const oldName = group.name;
+		group.name = newName.trim();
+		await this.saveGroups();
+		this.refresh();
+		
+		vscode.window.showInformationMessage(`Renamed group from "${oldName}" to "${newName}"`);
+	}
+
+	// Add a button to a group
+	async addButtonToGroup(buttonItem: SmartCmdButtonTreeItem, groupId: string): Promise<void> {
+		if (!buttonItem || !buttonItem.button) {
+			vscode.window.showWarningMessage('DevBoost: Invalid button item.');
+			return;
+		}
+
+		const group = this.groups.find(g => g.id === groupId);
+		if (!group) {
+			vscode.window.showWarningMessage('DevBoost: Group not found.');
+			return;
+		}
+
+		const buttonId = buttonItem.button.id;
+		if (!buttonId) {
+			vscode.window.showWarningMessage('DevBoost: Button does not have a valid ID.');
+			return;
+		}
+
+		// Check if button is already in the group
+		if (group.buttonIds.includes(buttonId)) {
+			vscode.window.showInformationMessage(`Button "${buttonItem.button.name}" is already in group "${group.name}".`);
+			return;
+		}
+
+		// Add button to the group
+		group.buttonIds.push(buttonId);
+		await this.saveGroups();
+		this.refresh();
+		
+		vscode.window.showInformationMessage(`Added "${buttonItem.button.name}" to group "${group.name}"`);
+	}
+
+	// Remove a button from a group
+	async removeButtonFromGroup(buttonItem: SmartCmdButtonTreeItem): Promise<void> {
+		if (!buttonItem || !buttonItem.button || !buttonItem.groupId) {
+			vscode.window.showWarningMessage('DevBoost: Invalid button or group context.');
+			return;
+		}
+
+		const group = this.groups.find(g => g.id === buttonItem.groupId);
+		if (!group) {
+			vscode.window.showWarningMessage('DevBoost: Group not found.');
+			return;
+		}
+
+		const buttonId = buttonItem.button.id;
+		if (!buttonId) {
+			return;
+		}
+
+		const index = group.buttonIds.indexOf(buttonId);
+		if (index === -1) {
+			return;
+		}
+
+		group.buttonIds.splice(index, 1);
+		await this.saveGroups();
+		this.refresh();
+		
+		vscode.window.showInformationMessage(`Removed "${buttonItem.button.name}" from group "${group.name}"`);
+	}
+
+	// Reorder buttons within a group
+	async reorderButtonsInGroup(groupId: string, newOrder: string[]): Promise<void> {
+		const group = this.groups.find(g => g.id === groupId);
+		if (!group) {
+			vscode.window.showWarningMessage('DevBoost: Group not found.');
+			return;
+		}
+
+		// Validate all IDs exist in the current button list
+		const validIds = newOrder.filter(id => 
+			group.buttonIds.includes(id) && this.buttons.some(b => b.id === id)
+		);
+
+		// Add any missing IDs that were in original group but not in newOrder
+		const missingIds = group.buttonIds.filter(id => !validIds.includes(id));
+		
+		group.buttonIds = [...validIds, ...missingIds];
+		await this.saveGroups();
+		this.refresh();
+	}
+
+	// Toggle group collapsed state
+	async toggleGroupCollapsed(item: SmartCmdGroupTreeItem): Promise<void> {
+		if (!item || !item.group) {
+			return;
+		}
+
+		const group = this.groups.find(g => g.id === item.group.id);
+		if (!group) {
+			return;
+		}
+
+		group.collapsed = !group.collapsed;
+		await this.saveGroups();
+		this.refresh();
+	}
+
+	// Get available groups for a button (groups where the button can be added)
+	getAvailableGroupsForButton(button: smartCmdButton): ButtonGroup[] {
+		// Return groups of the same scope that don't already contain this button
+		return this.groups.filter(g => 
+			g.scope === button.scope && !g.buttonIds.includes(button.id!)
+		);
+	}
+
+	// Get groups containing a specific button
+	getGroupsContainingButton(buttonId: string): ButtonGroup[] {
+		return this.groups.filter(g => g.buttonIds.includes(buttonId));
+	}
+
+	// Perform multiple group operations (from GroupEditPanel)
+	async performGroupOperations(operations: Array<{
+		type: 'delete' | 'rename' | 'reorder' | 'removeButton' | 'reorderGroups';
+		groupId: string;
+		newName?: string;
+		newButtonOrder?: string[];
+		buttonIdToRemove?: string;
+		newGroupOrder?: string[];
+		scope?: 'workspace' | 'global';
+	}>): Promise<void> {
+		if (!operations || operations.length === 0) {
+			return;
+		}
+
+		for (const op of operations) {
+			// Handle reorderGroups operation separately (doesn't need a specific group)
+			if (op.type === 'reorderGroups') {
+				if (op.newGroupOrder && op.scope) {
+					// Get groups of the specified scope
+					const scopeGroups = this.groups.filter(g => g.scope === op.scope);
+					const otherGroups = this.groups.filter(g => g.scope !== op.scope);
+					
+					// Reorder the scope groups based on newGroupOrder
+					const reorderedScopeGroups: ButtonGroup[] = [];
+					for (const groupId of op.newGroupOrder) {
+						const group = scopeGroups.find(g => g.id === groupId);
+						if (group) {
+							reorderedScopeGroups.push(group);
+						}
+					}
+					
+					// Add any groups that weren't in the new order (shouldn't happen, but safety)
+					for (const group of scopeGroups) {
+						if (!reorderedScopeGroups.find(g => g.id === group.id)) {
+							reorderedScopeGroups.push(group);
+						}
+					}
+					
+					// Combine: global groups first, then workspace groups
+					if (op.scope === 'global') {
+						this.groups = [...reorderedScopeGroups, ...otherGroups];
+					} else {
+						const globalGroups = otherGroups.filter(g => g.scope === 'global');
+						this.groups = [...globalGroups, ...reorderedScopeGroups];
+					}
+				}
+				continue;
+			}
+
+			const group = this.groups.find(g => g.id === op.groupId);
+			if (!group) {
+				continue;
+			}
+
+			switch (op.type) {
+				case 'delete':
+					const deleteIndex = this.groups.findIndex(g => g.id === op.groupId);
+					if (deleteIndex !== -1) {
+						this.groups.splice(deleteIndex, 1);
+					}
+					break;
+				
+				case 'rename':
+					if (op.newName && op.newName.trim().length > 0) {
+						group.name = op.newName.trim();
+					}
+					break;
+				
+				case 'reorder':
+					if (op.newButtonOrder && Array.isArray(op.newButtonOrder)) {
+						// Validate all IDs exist
+						const validIds = op.newButtonOrder.filter(id => 
+							group.buttonIds.includes(id) && this.buttons.some(b => b.id === id)
+						);
+						// Add any missing IDs
+						const missingIds = group.buttonIds.filter(id => !validIds.includes(id));
+						group.buttonIds = [...validIds, ...missingIds];
+					}
+					break;
+				
+				case 'removeButton':
+					if (op.buttonIdToRemove) {
+						const buttonIndex = group.buttonIds.indexOf(op.buttonIdToRemove);
+						if (buttonIndex !== -1) {
+							group.buttonIds.splice(buttonIndex, 1);
+						}
+					}
+					break;
+			}
+		}
+
+		await this.saveGroups();
+		this.refresh();
+	}
+
+	/**
+	 * Add or update a group directly (useful for import operations)
+	 */
+	async addOrUpdateGroup(group: ButtonGroup): Promise<void> {
+		const existingIndex = this.groups.findIndex(g => g.id === group.id && g.scope === group.scope);
+		
+		if (existingIndex !== -1) {
+			// Update existing group
+			this.groups[existingIndex] = group;
+		} else {
+			// Add new group
+			this.groups.push(group);
+		}
+		
+		await this.saveGroups();
+		this.refresh();
 	}
 }
 

@@ -46,6 +46,23 @@ Boost your development workflow with powerful productivity tools designed for mo
 
   ![Bulk Edit Demo](https://raw.githubusercontent.com/Kitashi14/DevBoost/refs/heads/release_beta/images/devboost3.gif)
 
+- **Button Groups**
+  - Organize buttons into custom groups for easier navigation
+  - Create groups within Global or Workspace scope
+  - Add buttons to multiple groups simultaneously
+  - Reorder buttons within groups via drag-and-drop
+  - Reorder groups themselves to customize layout
+  - Rename or delete groups without affecting the buttons
+  - "All Buttons" section always shows complete button list
+  - Edit Groups panel for bulk group management
+
+- **Import/Export**
+  - Export buttons, groups, and scripts to a zip file for backup or sharing
+  - Choose to export Global, Workspace, or both scopes
+  - Import SmartCmds from zip files with automatic scope preservation
+  - Conflict resolution options: skip duplicates, rename automatically, or overwrite existing
+  - Scripts are automatically organized by scope in exports
+
 - **Cross-Platform Compatibility**
   - Works seamlessly on Windows, macOS, and Linux
   - Adapts commands and scripts to your shell environment (bash, zsh, PowerShell, cmd)
@@ -77,13 +94,16 @@ Boost your development workflow with powerful productivity tools designed for mo
 - **Create Custom Button** - Click ➕ plus icon to manually create buttons or use AI assistance
 - **Execute Buttons** - Single-click any button to run commands instantly
 - **Edit & Manage Buttons** - Right-click buttons to edit, delete, or copy to global scope
-- **View Scripts** - Right-click script buttons (📜) to view and edit script files
+- **View Scripts** - Right-click script buttons to view and edit script files
 - **Bulk Edit Buttons** - Click 🖌️ to select multiple buttons for bulk edit
+- **Create Group** - Click 🗂️ on section header to create a new group
+- **Add to Group** - Right-click a button and select "Add to Group"
+- **Import/Export SmartCmds** - Right-click a section header to import/export SmartCmds using zip file
 - **Refresh Buttons** - Click 🔄 refresh icon to reload all buttons
 
 **Prompt Enhancer:**
-- **Quick Enhance** - Copy text to clipboard, run command from Command Palette (`DevBoost: Quick Enhance`), get enhanced result instantly
-- **Open Prompt Enhancer** - Use Command Palette (`DevBoost: Show Prompt Enhancer`) to access full interface
+- **Quick Enhance** - Copy text to clipboard, click Quick Enhance button, get enhanced result instantly
+- **Open Prompt Enhancer** - Click the Prompt Enhancer icon to access the interface
 - **Analyze & Improve** - Paste your prompt, get AI suggestions, select improvements to apply
 - **Generate from Intent** - Describe what you want, AI generates a complete prompt for you
 

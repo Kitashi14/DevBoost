@@ -222,7 +222,7 @@ export function generateScriptCommand(
 	if (ext === '.bat' || ext === '.cmd') {
 		command = `"${scriptPath}"`;
 	} else if ( ext === '.sh') {
-		command = `"${scriptPath}"`;
+		command = `bash "${scriptPath}"`;
 	} else if ( ext === '.py') {
 		command = `python3 "${scriptPath}"`;
 	} else if ( ext === '.js') {
