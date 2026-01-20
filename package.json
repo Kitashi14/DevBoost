@@ -2,7 +2,7 @@
   "name": "devboostextension",
   "displayName": "DevBoost",
   "description": "Boost your productivity through AI-driven tools.",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "publisher": "DevBoost",
   "icon": "images/devboost.png",
   "repository": {
@@ -247,12 +247,12 @@
           "group": "z_tracking@3"
         },
         {
-          "command": "devboost.exportSmartCmds",
+          "command": "devboost.importSmartCmds",
           "when": "view == devboost.smartCmdView",
           "group": "z_tracking@4"
         },
         {
-          "command": "devboost.importSmartCmds",
+          "command": "devboost.exportSmartCmds",
           "when": "view == devboost.smartCmdView",
           "group": "z_tracking@5"
         },

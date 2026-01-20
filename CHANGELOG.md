@@ -1,10 +1,8 @@
 # Changelog
 
-All notable changes to the DevBoost extension will be documented in this file.
-
 ## [0.9.0] - 2026-01-20
 
-### Added
+### Added (SmartCmd)
 - **Button Groups**: Organize buttons into custom groups for better navigation
   - Create groups within Global or Workspace scope
   - Add buttons to multiple groups simultaneously

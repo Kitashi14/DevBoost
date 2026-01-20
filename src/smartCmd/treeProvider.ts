@@ -78,7 +78,7 @@ export class SmartCmdGroupTreeItem extends SmartCmdTreeItemBase {
 	) {
 		super(
 			group.name,
-			group.collapsed ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded,
+			vscode.TreeItemCollapsibleState.Collapsed,
 			'group'
 		);
 		this.description = `${validButtonCount} button${validButtonCount !== 1 ? 's' : ''}`;
@@ -95,7 +95,7 @@ export class SmartCmdAllButtonsTreeItem extends SmartCmdTreeItemBase {
 	) {
 		super(
 			group.name,
-			group.collapsed ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded,
+			vscode.TreeItemCollapsibleState.Expanded,
 			'allButtons'
 		);
 		this.description = `${validButtonCount} button${validButtonCount !== 1 ? 's' : ''}`;
@@ -322,7 +322,6 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 					name: "All Buttons",
 					buttonIds: sectionButtons.map(b => b.button.id!),
 					scope: element.section == 'global' ? 'global' : 'workspace',
-					collapsed: false
 				};
 				children.push(new SmartCmdAllButtonsTreeItem(allButtonGroup, sectionButtons.length));
 			}
@@ -1027,8 +1026,7 @@ What would you like to do?`;
 			id: crypto.randomUUID(),
 			name: name.trim(),
 			buttonIds: [],
-			scope,
-			collapsed: false
+			scope
 		};
 
 		this.groups.push(newGroup);
@@ -1188,22 +1186,6 @@ What would you like to do?`;
 		const missingIds = group.buttonIds.filter(id => !validIds.includes(id));
 		
 		group.buttonIds = [...validIds, ...missingIds];
-		await this.saveGroups();
-		this.refresh();
-	}
-
-	// Toggle group collapsed state
-	async toggleGroupCollapsed(item: SmartCmdGroupTreeItem): Promise<void> {
-		if (!item || !item.group) {
-			return;
-		}
-
-		const group = this.groups.find(g => g.id === item.group.id);
-		if (!group) {
-			return;
-		}
-
-		group.collapsed = !group.collapsed;
 		await this.saveGroups();
 		this.refresh();
 	}
