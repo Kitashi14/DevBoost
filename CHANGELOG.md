@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.9.2] - 2026-05-25
+## [0.9.3] - 2026-05-25
 
 ### Fixed
 - **Duplicate example buttons**: Global example buttons no longer load multiple times across VS Code restarts (race condition in file I/O during activation)
