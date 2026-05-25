@@ -35,6 +35,11 @@ export class ButtonFormPanel {
 			panel.webview.onDidReceiveMessage(
 				async message => {
 					if (message.command === 'submit') {
+						// if scope is workspace, ensure workspace is open
+						if (message.data.scope === 'workspace' && (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0)) {
+							vscode.window.showErrorMessage('Cannot create workspace-scoped button: No workspace is open.');
+							return;
+						}
 						// Clear tracked script since user is submitting (not cancelling)
 						createdScriptFile = null;
 						createdScriptScope = null;

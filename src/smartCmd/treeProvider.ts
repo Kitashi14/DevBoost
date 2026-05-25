@@ -267,7 +267,7 @@ export class SmartCmdButtonsTreeProvider implements vscode.TreeDataProvider<Smar
 				}
 			}
 		}
-		this.saveButtons(); // Ensure all buttons have IDs
+		await this.saveButtons();
 		this.refresh();
 	}
 

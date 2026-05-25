@@ -209,11 +209,10 @@ async function loadExampleButtonsIfNeeded(
 	globalStoragePath: string
 ): Promise<void> {
 	try {
-		// Get current button counts
-		const workspaceButtonCount = await getButtonCount('workspace');
-		const globalButtonCount = await getButtonCount('global', globalStoragePath);
+		const currentButtons = buttonsProvider.getButtons();
+		const workspaceButtonCount = currentButtons.filter(b => b.scope === 'workspace').length;
+		const globalButtonCount = currentButtons.filter(b => b.scope === 'global').length;
 
-		// Load example buttons file
 		const exampleButtonsPath = path.join(context.extensionPath, 'exampleButtons.json');
 		const exampleContent = await fs.readFile(exampleButtonsPath, 'utf-8');
 		const examples = JSON.parse(exampleContent);
@@ -221,17 +220,14 @@ async function loadExampleButtonsIfNeeded(
 		let loadedCount = 0;
 
 		// Load workspace examples if no workspace buttons exist
-		if (workspaceButtonCount === 0 && examples.workspace && examples.workspace.length > 0) {
-			// Check if we need to create the example script
-			const scriptButton = examples.workspace.find((b: smartCmdButton) => b.scriptFile);
-			if (scriptButton && examples.exampleScript) {
-				// Create the example script file in workspace
-				if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+		if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+			if (workspaceButtonCount === 0 && examples.workspace && examples.workspace.length > 0) {
+				const scriptButton = examples.workspace.find((b: smartCmdButton) => b.scriptFile);
+				if (scriptButton && examples.exampleScript) {
 					const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
 					const scriptsDir = path.join(workspaceRoot, '.vscode', 'devBoost', 'scripts');
 					await fs.mkdir(scriptsDir, { recursive: true });
 					
-					// Determine script filename/content (prefer platform-specific example if provided)
 					let scriptFilename = examples.exampleScript.filename;
 					let scriptContent = examples.exampleScript.content;
 
@@ -243,7 +239,6 @@ async function loadExampleButtonsIfNeeded(
 					const scriptPath = path.join(scriptsDir, scriptFilename);
 					await fs.writeFile(scriptPath, scriptContent, { encoding: 'utf-8' });
 
-					// Make script executable on Unix-like systems
 					if (process.platform !== 'win32') {
 						try {
 							await fs.chmod(scriptPath, 0o755);
@@ -252,25 +247,21 @@ async function loadExampleButtonsIfNeeded(
 						}
 					}
 
-					// Update the button's scriptFile to the platform-specific filename
 					scriptButton.scriptFile = scriptFilename;
-
-					// Generate command for the script button
-					const scriptCommand = scriptManager.generateScriptCommand(
+					scriptButton.cmd = scriptManager.generateScriptCommand(
 						scriptButton.scriptFile,
 						'workspace',
 						globalStoragePath,
 						scriptButton.inputs
 					);
-					scriptButton.cmd = scriptCommand;
 					
 					console.log(`DevBoost: Created example script at ${scriptPath}`);
 				}
-			}
 
-			const added = await buttonsProvider.addButtons(examples.workspace, 'workspace', false);
-			loadedCount += added;
-			console.log(`DevBoost: Loaded ${added} example workspace buttons`);
+				const added = await buttonsProvider.addButtons(examples.workspace, 'workspace', false);
+				loadedCount += added;
+				console.log(`DevBoost: Loaded ${added} example workspace buttons`);
+			}
 		}
 
 		// Load global examples if no global buttons exist
@@ -292,35 +283,5 @@ async function loadExampleButtonsIfNeeded(
 		}
 	} catch (error) {
 		console.error('DevBoost: Error loading example buttons:', error);
-		// Don't show error to user - it's okay if examples fail to load
-	}
-}
-
-/**
- * Get count of buttons in a scope
- */
-async function getButtonCount(scope: 'workspace' | 'global', globalStoragePath?: string): Promise<number> {
-	try {
-		let buttonsFilePath: string;
-		
-		if (scope === 'global') {
-			if (!globalStoragePath) {
-				return 0;
-			}
-			buttonsFilePath = path.join(globalStoragePath, 'global-smartCmd.json');
-		} else {
-			if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
-				return 0;
-			}
-			const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-			buttonsFilePath = path.join(workspaceRoot, '.vscode', 'devBoost', 'smartCmd.json');
-		}
-
-		const content = await fs.readFile(buttonsFilePath, 'utf-8');
-		const buttons = JSON.parse(content);
-		return Array.isArray(buttons) ? buttons.length : 0;
-	} catch (error) {
-		// File doesn't exist or error reading - assume no buttons
-		return 0;
 	}
 }

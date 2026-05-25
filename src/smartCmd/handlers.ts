@@ -7,7 +7,7 @@ import * as activityLogging from '../activityLogging';
 import * as scriptManager from './scriptManager';
 import { SmartCmdButtonsTreeProvider, smartCmdButton, InputField, SmartCmdButtonTreeItem, SmartCmdGroupTreeItem, ButtonGroup } from './treeProvider';
 import { CustomDialog } from '../commonView/customDialog';
-import { InputFormPanel } from '../commonView/inputFormPanel';
+import { InputFieldConfig, InputFormPanel } from '../commonView/inputFormPanel';
 import { ButtonFormPanel } from './view/manualButtonFormPanel';
 import { AIButtonDescriptionPanel } from './view/aiButtonDescriptionPanel';
 import { BulkEditPanel, BulkOperation } from './view/bulkEditPanel';
@@ -611,10 +611,30 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 
 	// Handle input fields if present
 	if (button.inputs && button.inputs.length > 0) {
-		for (const input of button.inputs) {
-			const userInput = await vscode.window.showInputBox({
-				prompt: input.placeholder,
-				placeHolder: input.placeholder,
+		let result: { [key: string]: string | undefined } | null = {};
+		if(button.inputs.length > 1){
+			// Prepare input fields for the form
+			const inputFields: InputFieldConfig[] = button.inputs.map(input => ({
+				id: input.variable,
+				label: input.placeholder,
+				required: true,
+				validation: (value: string) => {
+					if (!value || value.trim().length === 0) {
+						return 'Input cannot be empty';
+					}
+					return null;
+				}
+			}));
+			// Show form to collect all inputs at once
+			result = await InputFormPanel.show(
+				`Inputs for: ${button.name}`,
+				inputFields,
+				'Execute'
+			);
+		} else {
+			result[button.inputs[0].variable] = await vscode.window.showInputBox({
+				prompt: button.inputs[0].placeholder,
+				placeHolder: button.inputs[0].placeholder,
 				validateInput: (value) => {
 					if (!value || value.trim().length === 0) {
 						return 'Input cannot be empty';
@@ -622,14 +642,19 @@ export async function executeButtonCommand(button: smartCmdButton, activityLogPa
 					return null;
 				}
 			});
+		}
 
-			if (!userInput) {
-				vscode.window.showInformationMessage('Command execution cancelled.');
-				return;
+		if (!result || Object.keys(result).length === 0) {
+			vscode.window.showInformationMessage('Command execution cancelled.');
+			return;
+		}
+
+		// Replace all variable placeholders with user inputs
+		for (const input of button.inputs) {
+			const userInput = result[input.variable];
+			if (userInput) {
+				finalCommand = finalCommand.replace(new RegExp(input.variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), userInput.trim());
 			}
-
-			// Replace variable placeholder with user input
-			finalCommand = finalCommand.replace(new RegExp(input.variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), userInput.trim());
 		}
 	}
 

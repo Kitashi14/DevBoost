@@ -13,9 +13,9 @@ export async function exportSmartCmds(buttonsProvider: SmartCmdButtonsTreeProvid
 	try {
 		// Ask user to select scope (global, workspace, or both)
 		const scopeChoice = await vscode.window.showQuickPick([
+			{ label: 'Both Global and Workspace', value: 'both', description: 'Export all commands' },
 			{ label: 'Global Commands', value: 'global', description: 'Export global buttons and scripts' },
-			{ label: 'Workspace Commands', value: 'workspace', description: 'Export workspace buttons and scripts' },
-			{ label: 'Both Global and Workspace', value: 'both', description: 'Export all commands' }
+			{ label: 'Workspace Commands', value: 'workspace', description: 'Export workspace buttons and scripts' }
 		], {
 			placeHolder: 'Select which commands to export'
 		});

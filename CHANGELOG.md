@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.2] - 2026-05-25
+
+### Fixed
+- **Duplicate example buttons**: Global example buttons no longer load multiple times across VS Code restarts (race condition in file I/O during activation)
+
+### Improved
+- **Multi-input execution**: Buttons with multiple inputs now show a single form instead of prompting one-by-one
+- **Export order**: "Both Global and Workspace" is now the default first option when exporting
+- **Workspace scope validation**: Creating a workspace-scoped button now warns if no workspace is open
+
 ## [0.9.0] - 2026-01-20
 
 ### Added (SmartCmd)
