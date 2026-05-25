@@ -31,6 +31,11 @@ export class AIButtonDescriptionPanel {
 			panel.webview.onDidReceiveMessage(
 				async message => {
 					if (message.command === 'submit') {
+						// if scope is workspace, ensure workspace is open
+						if (message.data.scope === 'workspace' && (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0)) {
+							vscode.window.showErrorMessage('Cannot create workspace-scoped button: No workspace is open.');
+							return;
+						}
 						const result: AIButtonDescriptionResult = {
 							description: message.data.description,
 							scope: message.data.scope as 'workspace' | 'global',
